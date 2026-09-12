@@ -1,0 +1,47 @@
+# Compilação e arquivos gerados pelo CMake
+/build/
+/build-*/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/CTestTestfile.cmake
+/Testing/
+/Makefile
+/compile_commands.json
+/CMakeUserPresets.json
+
+# Binários e objetos
+/distribuidora
+/distribuidora_tests
+/distribuidora_audio_tests
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dll
+*.exe
+*.pdb
+
+# Dados pessoais e capturas automáticas do jogo
+progress.save
+progress.save.tmp
+options.cfg
+options.cfg.tmp
+frame-*.bmp
+*.log
+
+# Configurações locais, credenciais e arquivos temporários
+.env
+.env.*
+!.env.example
+/.vscode/
+/.idea/
+/.codex/
+/.agents/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
