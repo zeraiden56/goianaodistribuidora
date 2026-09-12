@@ -255,11 +255,16 @@ void progressionTests() {
     std::cout<<"Bulk orders, progressive profit, two checkouts, bags and v4 saves passed\n";
 }
 int main() {
-    // mkdtemp avoids collisions and never touches real player data.
-    auto pattern=(std::filesystem::temp_directory_path()/"distribuidora-tests-XXXXXX").string();
-    char* created=mkdtemp(pattern.data());
-    if(!created)return 1;
-    std::filesystem::path directory=created;
+    // Atomic directory creation avoids collisions on Linux and Windows.
+    std::filesystem::path directory;
+    std::random_device random;
+    for(int attempt=0;attempt<100;++attempt) {
+        auto candidate=std::filesystem::temp_directory_path()/("distribuidora-tests-"+std::to_string(random()));
+        std::error_code error;
+        if(std::filesystem::create_directory(candidate,error)){directory=candidate;break;}
+        if(error){std::cerr<<error.message()<<'\n';return 1;}
+    }
+    if(directory.empty())return 1;
     int result=0;
     try {economyTests();capacityAndConsumptionTests();persistenceTests(directory);movementAndWorldTests();expansionAndHelperTests(directory);computerAndCustomerTests();progressionTests();}
     catch(const std::exception& e){std::cerr<<e.what()<<'\n';result=1;}

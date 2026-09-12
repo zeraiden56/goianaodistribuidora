@@ -21,6 +21,14 @@ cmake --build build -j
 
 `Debug` inclui símbolos para usar breakpoints no GDB ou no editor. Para uma compilação otimizada, use `-DCMAKE_BUILD_TYPE=Release`.
 
+## Executável Windows pelo GitHub Actions
+
+O workflow `.github/workflows/windows.yml` compila com MSYS2 UCRT64 em um runner Windows, executa os testes e empacota o executável com suas DLLs. É acionado por push em `main`, tags `v*`, pull requests e manualmente em **Actions → Windows build → Run workflow**.
+
+Depois de uma execução bem-sucedida, abra **Artifacts** e baixe `goianao-distribuidora-windows-x64`. Extraia o ZIP inteiro e execute `distribuidora.exe`, mantendo as DLLs ao lado. Anexe esse ZIP à release para disponibilizar a versão Windows. O workflow não publica releases automaticamente.
+
+O teste do pacote verifica se o executável inicia sem depender do PATH do MSYS2. A janela 3D, os controles, o áudio real e o salvamento ainda devem ser conferidos em um PC Windows antes de divulgar a versão como validada. É necessário um driver gráfico com suporte a OpenGL.
+
 ## Menus e opções
 
 O menu inicial permite **Continuar**, **Novo jogo**, **Opções** ou **Sair para o desktop**. Novo jogo pede confirmação antes de substituir um save existente. Use mouse e clique ou setas e Enter.

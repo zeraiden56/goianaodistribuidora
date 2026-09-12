@@ -3,6 +3,12 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace {
 bool between(float v,float low,float high) {return std::isfinite(v)&&v>=low&&v<=high;}
@@ -18,7 +24,12 @@ bool atomicWrite(const std::filesystem::path& file,const std::string& data,std::
     std::ofstream out(temp,std::ios::binary|std::ios::trunc);
     out<<data;out.flush();bool ok=bool(out);out.close();ok=ok&&!out.fail();
     if(!ok) {error="FALHA AO GRAVAR. O SAVE ANTERIOR FOI PRESERVADO.";return false;}
+#ifdef _WIN32
+    if(!MoveFileExW(temp.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))
+        ec=std::error_code(static_cast<int>(GetLastError()),std::system_category());
+#else
     std::filesystem::rename(temp,file,ec);
+#endif
     if(ec) {error="FALHA AO SUBSTITUIR O ARQUIVO DE DADOS.";return false;}
     return true;
 }

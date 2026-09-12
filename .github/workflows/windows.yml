@@ -1,0 +1,52 @@
+name: Windows build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-SDL2
+      - name: Compile
+        run: |
+          cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-windows --parallel 4
+      - name: Test gameplay, saves and audio
+        run: ctest --test-dir build-windows --output-on-failure
+      - name: Package executable and runtime libraries
+        run: |
+          cmake -DAPP="$(cygpath -m "$PWD/build-windows/distribuidora.exe")" -DDEST="$(cygpath -m "$PWD/build-windows/package")" -DRUNTIME_DIR="$(cygpath -m /ucrt64/bin)" -P cmake/package-windows.cmake
+          cp README.md build-windows/package/
+          if [ -d /ucrt64/share/licenses ]; then
+            cp -r /ucrt64/share/licenses build-windows/package/third-party-licenses
+          fi
+      - name: Check packaged executable outside MSYS2 runtime path
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          & ./build-windows/package/distribuidora.exe --help
+          if ($LASTEXITCODE -ne 0) { throw "Packaged executable failed to start" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goianao-distribuidora-windows-x64
+          path: build-windows/package/
+          if-no-files-found: error

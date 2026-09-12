@@ -339,6 +339,7 @@ public:
     }
     int run(bool test,const std::filesystem::path& requestedDirectory) {
         smoke=test;
+        SDL_SetMainReady();
         if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_TIMER)!=0)throw std::runtime_error(SDL_GetError());
         auto directory=requestedDirectory;
         if(directory.empty()) {

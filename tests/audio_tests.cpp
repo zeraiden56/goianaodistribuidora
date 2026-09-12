@@ -6,6 +6,7 @@
 
 void check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 int main() {
+    SDL_SetMainReady();
     try {
         for(int i=0;i<int(Sound::Count);++i) {
             auto sound=synthesizeSound(static_cast<Sound>(i));
