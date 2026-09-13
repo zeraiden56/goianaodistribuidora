@@ -1,4 +1,5 @@
 #include "render.hpp"
+#include "shop_layout.hpp"
 #include "interior.hpp"
 #include "fixtures.hpp"
 #include "world.hpp"
@@ -56,7 +57,14 @@ void sign(float x,float y,float z,const std::string& title,float width,bool back
 }
 void item(int product,float x,float y,float z,float size) {
     glPushMatrix();glTranslatef(x,y,z);glScalef(size,size,size);
-    if(product==3) {
+    if(product==4) {
+        box({0,0,0,.22f,.36f,.22f,.78f,.59f,.14f});
+        for(float y:{-.19f,.19f})box({0,y,0,.23f,.025f,.23f,.78f,.81f,.81f});
+    } else if(product==5) {
+        box({0,0,0,.27f,.44f,.27f,.16f,.45f,.2f});
+        box({0,.29f,0,.12f,.15f,.12f,.18f,.5f,.22f});
+        box({0,.38f,0,.13f,.035f,.13f,.8f,.18f,.13f});
+    } else if(product==3) {
         box({0,0,0,.36f,.42f,.25f,.56f,.82f,.9f});
         box({0,.23f,0,.18f,.06f,.12f,.85f,.93f,.95f});
     } else if(product==1) box({0,0,0,.23f,.31f,.12f,.85f,.82f,.7f});
@@ -68,43 +76,52 @@ void item(int product,float x,float y,float z,float size) {
     box({0,0,.133f,.18f,.12f,.018f,.92f,.76f,.42f});
     glPopMatrix();
 }
+void crate(int product,float x,float y,float z,float size) {
+    glPushMatrix();glTranslatef(x,y,z);glScalef(size,size,size);
+    box({0,-.12f,0,.7f,.09f,.48f,.18f,.38f,.26f});
+    for(float side:{-.32f,.32f})box({side,.05f,0,.065f,.32f,.48f,.2f,.43f,.29f});
+    for(float side:{-.21f,.21f})box({0,.05f,side,.7f,.32f,.065f,.2f,.43f,.29f});
+    for(int i=0;i<6;++i)item(product,-.2f+(i%3)*.2f,.16f,-.1f+(i/3)*.2f,.55f);
+    glPopMatrix();
+}
 void scene(const Game& g,int activeCamera) {
     renderStreet((g.day-1)*180.0+g.time);
     renderSecurityDevices(activeCamera);
     box({0,-.12f,0,30,.2f,40,.055f,.075f,.09f});
     for(int x=-5;x<5;++x) for(int z=-4;z<4;++z) box({x+.5f,0,z+.5f,.98f,.04f,.98f,.43f,.44f,.37f});
     renderBackRoom(g);
+    renderAnnex(g);
     renderHelper(g);
-    box({-5,1.8f,0,.2f,3.6f,8,.58f,.64f,.48f});box({5,1.8f,0,.2f,3.6f,8,.58f,.64f,.48f});
+    box({-5,1.8f,0,.2f,3.6f,8,.58f,.64f,.48f});if(!g.largeStore)box({5,1.8f,0,.2f,3.6f,8,.58f,.64f,.48f});
     box({0,3.7f,0,10,.18f,8,.29f,.32f,.28f});
     renderCigaretteCounter(g);box({0,1.15f,-2.6f,10,.15f,1.1f,.65f,.52f,.32f});
-    // Clear service hatch: x [-2.9,-1.3], y [1.23,2.18], in the fixed grade.
-    for(float x=-4.8f;x<5;x+=.6f) {
-        if((x>-2.94f&&x< -1.26f)||(g.secondCheckout&&x>1.26f&&x<2.94f)) box({x,2.89f,-2.9f,.045f,1.42f,.045f,.14f,.16f,.17f});
-        else box({x,2.4f,-2.9f,.045f,2.4f,.045f,.14f,.16f,.17f});
-    }
+    // Each purchased register gets a separate opening through the grade.
+    auto hatch=[&](float x) {
+        for(int lane=0;lane<g.checkoutCount();++lane) {
+            float cx=checkoutX(lane);
+            if(std::abs(x-cx)<.88f)return true;
+        }
+        return false;
+    };
+    for(float x=-4.8f;x<(g.largeStore?9:5);x+=.6f)
+        box({x,hatch(x)?2.89f:2.4f,-2.9f,.045f,hatch(x)?1.42f:2.4f,.045f,.14f,.16f,.17f});
     for(float y:{1.4f,2.5f,3.4f}) {
-        if(y<2.18f) {
-            box({-3.95f,y,-2.9f,2.1f,.045f,.045f,.14f,.16f,.17f});
-            if(g.secondCheckout) {
-                box({0,y,-2.9f,2.52f,.045f,.045f,.14f,.16f,.17f});
-                box({3.97f,y,-2.9f,2.06f,.045f,.045f,.14f,.16f,.17f});
-            } else box({1.85f,y,-2.9f,6.3f,.045f,.045f,.14f,.16f,.17f});
-        } else box({0,y,-2.9f,10,.045f,.045f,.14f,.16f,.17f});
+        if(y>2.18f)box({g.largeStore?2.f:0.f,y,-2.9f,g.largeStore?14.f:10.f,.045f,.045f,.14f,.16f,.17f});
+        else for(float x=-4.975f;x<(g.largeStore?9:5);x+=.05f)
+            if(!hatch(x))box({x,y,-2.9f,.05f,.045f,.045f,.14f,.16f,.17f});
     }
-    for(float x:{-2.94f,-1.26f}) box({x,1.7f,-2.9f,.08f,1.03f,.09f,.63f,.55f,.32f});
-    for(float y:{1.23f,2.18f}) box({-2.1f,y,-2.9f,1.76f,.08f,.09f,.63f,.55f,.32f});
-    box({-3.25f,1.4f,-2.4f,.65f,.35f,.48f,.13f,.15f,.16f});box({-3.25f,1.65f,-2.5f,.46f,.22f,.12f,.38f,.68f,.38f});
-    sign(-3.65f,1.f,-2.13f,"CAIXA",.85f);
-    sign(-2.8f,2.48f,-2.83f,"ENTREGAS",1.4f);
-    for(int i=0;i<g.delivered;++i) item(g.wanted,-2.6f+i*.35f,1.46f,-2.55f,.7f);
-    if(g.secondCheckout) {
-        for(float x:{1.26f,2.94f})box({x,1.7f,-2.9f,.08f,1.03f,.09f,.63f,.55f,.32f});
-        for(float y:{1.23f,2.18f})box({2.1f,y,-2.9f,1.76f,.08f,.09f,.63f,.55f,.32f});
-        box({3.25f,1.4f,-2.4f,.65f,.35f,.48f,.13f,.15f,.16f});
-        box({3.25f,1.65f,-2.5f,.46f,.22f,.12f,.38f,.68f,.38f});
-        sign(2.9f,1.f,-2.13f,"CAIXA 2",.85f);sign(1.4f,2.48f,-2.83f,"ENTREGAS 2",1.4f);
-        for(int i=0;i<g.second.delivered;++i)item(g.second.wanted,1.6f+i*.25f,1.46f,-2.55f,.7f);
+    for(int lane=0;lane<g.checkoutCount();++lane) {
+        float cx=checkoutX(lane),rx=lane>=3?cx+.7f:lane==2?.98f:lane?3.25f:-3.25f;
+        for(float x:{cx-.88f,cx+.88f})box({x,1.7f,-2.9f,.08f,1.03f,.09f,.63f,.55f,.32f});
+        for(float y:{1.23f,2.18f})box({cx,y,-2.9f,1.84f,.08f,.09f,.63f,.55f,.32f});
+        box({rx,1.4f,-2.4f,.55f,.35f,.48f,.13f,.15f,.16f});
+        box({rx,1.65f,-2.5f,.46f,.22f,.12f,.38f,.68f,.38f});
+        sign(cx-.65f,2.48f,-2.83f,"CAIXA "+std::to_string(lane+1),1.3f);
+        int delivered=lane>=2?g.extraCheckout(lane).delivered:lane?g.second.delivered:g.delivered;
+        int wanted=lane>=2?g.extraCheckout(lane).wanted:lane?g.second.wanted:g.wanted;
+        bool wholesale=lane>=2?g.extraCheckout(lane).wholesale:lane?g.second.wholesale:g.wholesale;
+        if(wholesale)for(int i=0;i<std::min(5,(delivered+11)/12);++i)crate(wanted,cx-.55f+(i%3)*.38f,1.4f+(i/3)*.3f,-2.55f,.5f);
+        else for(int i=0;i<delivered;++i)item(wanted,cx-.55f+i*.25f,1.46f,-2.55f,.7f);
     }
     box({3.6f,.55f,1.8f,1.7f,1.1f,1,.43f,.29f,.17f});box({3.6f,1.5f,1.9f,.85f,.65f,.2f,.12f,.16f,.17f});box({3.6f,1.51f,1.78f,.7f,.5f,.03f,.2f,.68f,.55f});
     renderRefrigerators(g);
@@ -145,10 +162,16 @@ void renderWorld(const Game& g,const Player& p,const Settings& settings,int w,in
         glClear(GL_DEPTH_BUFFER_BIT);glLoadIdentity();
         float lift=g.consumeTime>0?std::sin((2-g.consumeTime)*3.14159265f/2)*.25f:0;
         int product=g.consumeTime>0?g.consuming:g.held;
+        if(g.consumeTime==0&&g.heldPacked) {
+            for(int i=0;i<std::min(3,(g.heldCount+11)/12);++i)crate(g.held,.3f,-.5f+i*.14f,-1.05f,.7f);
+        } else if(g.consumeTime==0&&g.bagCapacity>1) {
+            box({.45f,-.48f,-.85f,.44f,.4f,.32f,.69f,.61f,.4f});
+            for(int i=1;i<g.heldCount;++i)item(g.held,.32f+(i%3)*.12f,-.25f,-.82f-(i/3)*.13f,.4f);
+        }
         if(g.consumeTime>0&&product==1) {
             box({.3f,-.3f+lift,-.7f,.025f,.025f,.25f,.88f,.86f,.76f});
             box({.3f,-.3f+lift,-.84f,.027f,.027f,.025f,.9f,.3f,.1f});
-        } else {
+        } else if(!g.heldPacked||g.consumeTime>0) {
             glPushMatrix();glTranslatef(.38f,-.33f+lift,-.85f);
             if(g.consumeTime>0)glRotatef(lift*180,0,0,1);
             item(product,0,0,0,.8f);glPopMatrix();

@@ -17,9 +17,9 @@ void renderComputer(const Game& g,const ComputerUI& ui) {
     bevel(850,44,29,24);black(860,51,"X",1.5f);
     black(93,89,"DISPONIVEL",1.2f);black(93,109,"R$ "+std::to_string(g.cash)+",00",2.4f);
     black(440,87,"LUCRO BASE +"+std::to_string(g.marginBonus())+"% - DIA E NIVEL",1.25f);
-    black(440,105,"VENDA: "+std::to_string(g.salePrice(0))+" / "+std::to_string(g.salePrice(1))+" / "+std::to_string(g.salePrice(2))+" / "+std::to_string(g.salePrice(3))+" REAIS",1.2f);
+    black(440,105,"SACOLA JOGADOR E EQUIPE: "+std::to_string(g.bagCapacity)+" UN. OU CX DE 12",1.2f);
     black(440,121,g.pending>=0?"ENTREGA: "+std::to_string(g.pendingUnits)+" UN. EM "+std::to_string(int(std::ceil(g.delivery)))+" S":"ENTREGAS EM 12 S - PAGAMENTO NA HORA",1.1f);
-    bevel(91,139,480,222,true);black(103,151,"PRODUTO",1.3f);black(275,151,"ESTOQUE",1.3f);black(414,151,"LOTE "+std::to_string(g.orderSize),1.3f);
+    bevel(91,139,480,224,true);black(103,151,"PRODUTO",1.3f);black(275,151,"ESTOQUE",1.2f);black(359,151,"VENDA",1.2f);black(436,151,"LOTE "+std::to_string(g.orderSize),1.2f);
     black(590,130,"SERVICOS DA LOJA",1.4f);
     auto buttons=computerButtons();
     for(int i=0;i<int(buttons.size());++i) {
@@ -28,18 +28,23 @@ void renderComputer(const Game& g,const ComputerUI& ui) {
         if(selected)rect(b.x+4,b.y+4,b.w-8,b.h-8,.03f,.08f,.39f);
         else if(!enabled)rect(b.x+3,b.y+3,b.w-6,b.h-6,.67f,.67f,.66f);
         float ink=selected?1.f:(enabled?.06f:.35f);
-        if(i<4) {
-            text(b.x+10,b.y+14,g.products[i].name,1.5f,ink,ink,ink);
-            text(275,b.y+14,g.stockLabel(i),1.4f,ink,ink,ink);
-            text(414,b.y+14,"R$ "+std::to_string(g.orderCost(i)),1.5f,ink,ink,ink);
+        int product=computerProduct(b.action);
+        if(product>=0) {
+            text(b.x+10,b.y+10,g.products[product].name,1.35f,ink,ink,ink);
+            text(275,b.y+10,product>=g.availableProducts()?"TRAVADO":g.stockLabel(product),1.15f,ink,ink,ink);
+            text(359,b.y+10,"R$ "+std::to_string(g.salePrice(product)),1.1f,ink,ink,ink);
+            text(436,b.y+10,"R$ "+std::to_string(g.orderCost(product)),1.25f,ink,ink,ink);
         } else {
+            int workers=g.staffCount();
             std::string label=i==4?"CAMERAS AO VIVO":i==5?"NIVEL - R$ "+std::to_string(g.level*200):
-                i==6?(g.expanded?"LOJA AMPLIADA":"AMPLIAR - R$ 600"):
-                i==7?(g.secondHelper.hired?"2 ATENDENTES CONTRATADOS":g.helper.hired?"2O ATENDENTE - R$ 350":"ATENDENTE - R$ 350"):
-                i==8?"FECHAR":i==9?"LOTE "+std::to_string(g.orderSize)+" UN. - DESCONTO "+(g.orderSize==48?"20":g.orderSize==24?"10":"0")+"% - CLIQUE PARA TROCAR":
-                i==10?(g.secondCheckout?"SEGUNDO CAIXA ABERTO":"GRADE + CAIXA 2 - R$ 500"):
-                g.bagCapacity==5?"SACOLA MAXIMA: 5 UNIDADES":"SACOLA "+std::to_string(g.bagCapacity+1)+" UN. - R$ "+std::to_string(g.bagCapacity*100);
-            text(b.x+12,b.y+(i>=9?8:13),label,i==9?1.15f:i>=10?1.25f:1.45f,ink,ink,ink);
+                i==6?(g.largeStore?"LOJA NO TAMANHO MAXIMO":"AMPLIAR "+std::to_string(g.expanded?2:1)+" - R$ "+std::to_string(g.expansionPrice())):
+                i==7?(workers==5?"5 ATENDENTES CONTRATADOS":"ATENDENTE "+std::to_string(workers+1)+" - R$ 350"):
+                i==8?"FECHAR":i==9?"LOTE "+std::to_string(g.orderSize)+" UN. - DESCONTO "+std::to_string(g.lotDiscount())+"% - CLIQUE PARA TROCAR":
+                i==10?(g.checkoutCount()==5?"5 CAIXAS ABERTOS":"CAIXA "+std::to_string(g.checkoutCount()+1)+" + GRADE - R$ "+std::to_string(g.checkoutPrice())):
+                i==11?(g.bagCapacity==5?"SACOLAS MAXIMAS: 5 UN.":"SACOLA "+std::to_string(g.bagCapacity+1)+" UN. - R$ "+std::to_string(g.bagCapacity*100)):
+                i==14?(g.storageLevel==3?"ESTOQUE NO MAXIMO":"ESTOQUE + - R$ "+std::to_string(250*(g.storageLevel+1))):
+                g.staffSpeedLevel==3?"CORRIDA DA EQUIPE MAXIMA":"CORRIDA "+std::to_string(g.staffSpeedLevel+1)+" - R$ "+std::to_string(400*(g.staffSpeedLevel+1));
+            text(b.x+10,b.y+9,label,i==9?1.1f:1.25f,ink,ink,ink);
         }
     }
     bevel(91,393,775,27,true);

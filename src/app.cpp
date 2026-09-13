@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "shop_layout.hpp"
 #include "audio.hpp"
 #include "computer.hpp"
 #include "menu.hpp"
@@ -112,7 +113,7 @@ public:
         desktop.selected=index;auto action=computerButtons()[index].action;
         auto unavailable=computerUnavailable(game,action);
         if(!unavailable.empty()){game.message=unavailable;return;}
-        if(index<4)game.order(index);
+        if(computerProduct(action)>=0)game.order(computerProduct(action));
         else if(action==ComputerAction::Cameras){surveillance=true;camera=0;capture();}
         else if(action==ComputerAction::Level)game.upgradeLevel();
         else if(action==ComputerAction::Expansion){if(game.expand())audio.play(Sound::Delivery);}
@@ -120,7 +121,30 @@ public:
         else if(action==ComputerAction::Lot)game.cycleOrderSize();
         else if(action==ComputerAction::Checkout)game.upgradeCheckout();
         else if(action==ComputerAction::Bag)game.upgradeBag();
+        else if(action==ComputerAction::Storage)game.upgradeStorage();
+        else if(action==ComputerAction::Speed)game.upgradeStaffSpeed();
         else if(action==ComputerAction::Close){computer=false;capture();}
+    }
+    void interact(bool clicked=false,bool packed=false) {
+        int target=interaction(player.x,player.z,player.yaw,game.expanded,game.secondCheckout,game.largeStore,game.thirdCheckout,game.annexCheckouts);
+        if((player.seated&&target==16)||(!player.seated&&(target==4||target==16))) {
+            computer=true;desktop.selected=0;audio.moved(0);audio.play(Sound::Computer);
+        } else if(player.seated) {
+            if(clicked&&target==7){game.tvOn=!game.tvOn;audio.play(Sound::Computer,.35f);}
+            else if(!clicked)toggleSeat(player,game.expanded);
+        } else if(stationCheckout(target)>=0) {
+            int lane=stationCheckout(target),before=game.sold;
+            if(game.deliverPlayer(lane)) {
+                if(game.sold>before)audio.payment();else audio.play(Sound::Pickup);
+            }
+        } else if(target==6){if(toggleSeat(player,game.expanded))audio.moved(0);}
+        else if(target==7){game.tvOn=!game.tvOn;audio.play(Sound::Computer,.35f);}
+        else {
+            int product=stationProduct(target);
+            bool depot=(target>=8&&target<=11)||target>=17;
+            if(product>=0&&game.pickup(product,!depot,packed))audio.play(Sound::Pickup);
+        }
+        capture();
     }
     void key(SDL_Keycode key) {
         if(key==SDLK_F11){option(0,1);if(!menu.notice.empty())game.message=menu.notice;return;}
@@ -152,6 +176,8 @@ public:
             else if(key==SDLK_DOWN||key==SDLK_RIGHT||key==SDLK_TAB)desktop.selected=(desktop.selected+1)%int(computerButtons().size());
             else if(key==SDLK_RETURN||key==SDLK_SPACE)computerAction(desktop.selected);
             else if(key>=SDLK_1&&key<=SDLK_4)computerAction(int(key-SDLK_1));
+            else if(key==SDLK_5)computerAction(12);
+            else if(key==SDLK_6)computerAction(13);
             else if(key==SDLK_c)computerAction(4);
             else if(key==SDLK_u)computerAction(5);
             else if(key==SDLK_b)computerAction(6);
@@ -159,22 +185,10 @@ public:
             else if(key==SDLK_e)computerAction(8);
             return;
         }
-        if(key==SDLK_e) {
-            int target=interaction(player.x,player.z,player.yaw,game.expanded,game.secondCheckout);
-            if(player.seated){toggleSeat(player,game.expanded);}
-            else if(computer){computer=false;surveillance=false;}
-            else if(target==4){computer=true;desktop.selected=0;audio.moved(0);audio.play(Sound::Computer);}
-            else if(target==5||target==12) {
-                if(game.deliver(game.held,target==12?1:0)) {
-                    if(!(target==12?game.second.customer:game.customer))game.message=audio.payment()?"VENDA CONCLUIDA! CARTAO APROVADO.":"VENDA CONCLUIDA! DINHEIRO NO CAIXA.";
-                    else audio.play(Sound::Pickup);
-                }
-            }
-            else if(target==6){if(toggleSeat(player,game.expanded))audio.moved(0);}
-            else if(target==7){game.tvOn=!game.tvOn;audio.play(Sound::Computer,.35f);}
-            else if(target>=8&&target<=11&&game.pickup(target-8,false))audio.play(Sound::Pickup);
-            else if(target>=0&&target<4&&game.pickup(target))audio.play(Sound::Pickup);
-            capture();
+        if(key==SDLK_e)interact();
+        if(key==SDLK_f)interact(false,true);
+        if(key==SDLK_c&&player.seated) {
+            computer=true;desktop.selected=0;audio.play(Sound::Computer);capture();
         }
         if(!computer&&key==SDLK_t&&game.expanded&&(player.seated||interaction(player.x,player.z,player.yaw,true)==7)) {
             game.tvOn=!game.tvOn;audio.play(Sound::Computer,.35f);
@@ -203,6 +217,9 @@ public:
                     if(hit>=0)menu.selected=hit;
                 }
             }
+            if(event.type==SDL_MOUSEBUTTONDOWN&&(event.button.button==SDL_BUTTON_LEFT||event.button.button==SDL_BUTTON_RIGHT)&&menu.screen==Screen::Playing&&!computer&&!surveillance) {
+                interact(true,event.button.button==SDL_BUTTON_RIGHT);continue;
+            }
             if(event.type==SDL_MOUSEBUTTONDOWN&&event.button.button==SDL_BUTTON_LEFT&&menu.screen==Screen::Playing&&computer&&!surveillance) {
                 int w,h;SDL_GetWindowSize(window,&w,&h);
                 int hit=computerHit(event.button.x*960/std::max(w,1),event.button.y*540/std::max(h,1));
@@ -226,7 +243,7 @@ public:
             auto keys=SDL_GetKeyboardState(nullptr);
             float f=float(keys[SDL_SCANCODE_W]-keys[SDL_SCANCODE_S]),s=float(keys[SDL_SCANCODE_D]-keys[SDL_SCANCODE_A]);
             bool sprint=keys[SDL_SCANCODE_LSHIFT]||keys[SDL_SCANCODE_RSHIFT];
-            audio.moved(movePlayer(player,f,s,sprint,game.intoxication,dt,game.expanded));
+            audio.moved(movePlayer(player,f,s,sprint,game.intoxication,dt,game.expanded,game.largeStore));
         }
         if(autosave>=30) {autosave=0;save();}
     }
@@ -237,6 +254,9 @@ public:
         event.button.x=logicalX*w/960;event.button.y=logicalY*h/540;
         if(SDL_PushEvent(&event)<0)throw std::runtime_error(SDL_GetError());
         events();
+    }
+    void testComputerClick(int index) {
+        auto b=computerButtons()[index];testClick(b.x+b.w/2,b.y+b.h/2);
     }
     void smokeStep() {
         auto require=[](bool ok){if(!ok)throw std::runtime_error("Menu smoke test failed");};
@@ -300,8 +320,8 @@ public:
         case 33:
             player.x=2.1f;player.z=1.8f;player.yaw=1.5707963f;key(SDLK_e);require(computer);
             game.cash=1000;game.products[0].stock=5;break;
-        case 34:testClick(250,199);require(game.pending==0&&game.cash==952);break;
-        case 35:testClick(250,240);require(game.pending==0&&game.cash==952);break;
+        case 34:testComputerClick(0);require(game.pending==0&&game.cash==952);break;
+        case 35:testComputerClick(1);require(game.pending==0&&game.cash==952);break;
         case 36:game.tick(12);key(SDLK_RETURN);require(game.pending==1&&game.cash==868);break;
         case 37:testClick(863,55);require(!computer);player.x=-2.f;player.z=.9f;player.yaw=3.14159265f;player.pitch=-5;break;
         case 38:player.x=.65f;player.z=-1.3f;player.yaw=0;player.pitch=30;key(SDLK_e);require(game.held==1);break;
@@ -310,21 +330,72 @@ public:
         case 41:game.customerStyle=5;break;
         case 42:
             game.cash=5000;player.x=2.1f;player.z=1.8f;player.yaw=1.5707963f;player.pitch=0;
-            key(SDLK_e);require(computer);testClick(680,346);require(game.secondCheckout);
-            testClick(680,310);require(game.secondHelper.hired);
-            for(int i=0;i<4;++i)testClick(680,374);
-            require(game.bagCapacity==5);testClick(250,365);require(game.orderSize==24);break;
+            key(SDLK_e);require(computer);testComputerClick(10);require(game.secondCheckout);
+            testComputerClick(7);require(game.secondHelper.hired);
+            for(int i=0;i<4;++i)testComputerClick(11);
+            require(game.bagCapacity==5);testComputerClick(9);require(game.orderSize==24);break;
         case 43:
-            testClick(250,365);require(game.orderSize==48);game.tick(12);game.products[0].stock=5;
-            testClick(250,199);require(game.pending==0&&game.pendingUnits==48);require(save());break;
+            testComputerClick(9);require(game.orderSize==48);game.tick(12);game.products[0].stock=5;
+            testComputerClick(0);require(game.pending==0&&game.pendingUnits==48);require(save());break;
         case 44:
             testClick(863,55);player.x=0;player.z=1;player.yaw=0;
             game.second.customer=true;game.second.wanted=3;game.second.quantity=5;game.second.patience=65;break;
         case 45:
             player.x=2.1f;player.z=-1.6f;player.yaw=0;
             if(game.held>=0)require(game.pickup(game.held,false));
-            require(game.pickup(3));key(SDLK_e);require(game.second.delivered==1);require(save());break;
-        case 46:key(SDLK_ESCAPE);activate(4);require(!running);break;
+            require(game.pickup(3));key(SDLK_e);require(!game.second.customer);require(save());break;
+        case 46:
+            player.x=2.1f;player.z=1.8f;player.yaw=1.5707963f;game.cash=10000;
+            testClick(480,270);require(computer);testComputerClick(6);require(game.largeStore);
+            testComputerClick(10);require(game.thirdCheckout);testComputerClick(7);require(game.thirdHelper.hired);
+            testComputerClick(14);require(game.storageLevel==1);break;
+        case 47:
+            game.tick(12);testComputerClick(12);require(game.pending==4);game.tick(12);
+            testComputerClick(13);require(game.pending==5);game.tick(12);testClick(863,55);break;
+        case 48:
+            player.x=7.f;player.z=.5f;player.yaw=3.14159265f;player.pitch=-5;break;
+        case 49:
+            if(game.held>=0)game.pickup(game.held,false);
+            player.x=8.f;player.z=2.1f;player.yaw=3.14159265f;testClick(480,270);
+            require(game.held==5&&game.heldCount==5);break;
+        case 50:
+            player.x=0;player.z=-1.6f;player.yaw=0;player.pitch=0;
+            game.third.customer=true;game.third.wanted=5;game.third.quantity=2;game.third.delivered=0;game.third.patience=65;
+            testClick(480,270);require(!game.third.customer&&game.heldCount==3);break;
+        case 51:
+            player.x=2.65f;player.z=6.2f;player.yaw=1.5707963f;
+            testClick(480,270);require(player.seated);player.yaw=-2.295f;player.pitch=-4;break;
+        case 52:
+            testClick(480,270);require(computer&&player.seated);require(save());break;
+        case 53:
+            key(SDLK_e);require(!computer&&player.seated);key(SDLK_c);require(computer&&player.seated);break;
+        case 54:
+            game.cash=50000;testComputerClick(10);testComputerClick(10);require(game.checkoutCount()==5);
+            testComputerClick(7);testComputerClick(7);require(game.staffCount()==5);
+            for(int i=0;i<3;++i)testComputerClick(15);
+            require(game.staffSpeedLevel==3);testComputerClick(14);testComputerClick(14);break;
+        case 55:
+            for(int i=0;i<3;++i)testComputerClick(9);
+            require(game.orderSize==288);
+            game.products[0].stock=0;testComputerClick(0);require(game.pendingUnits==288);game.tick(12);break;
+        case 56:
+            key(SDLK_e);player.seated=false;
+            if(game.held>=0)game.pickup(game.held,false);
+            player.x=-3.45f;player.z=2.1f;player.yaw=3.14159265f;key(SDLK_f);
+            require(game.heldPacked&&game.heldCount==60);break;
+        case 57:
+            player.x=5.9f;player.z=-1.6f;player.yaw=0;
+            game.annex[0].customer=true;game.annex[0].wholesale=true;game.annex[0].wanted=0;game.annex[0].quantity=36;game.annex[0].delivered=0;game.annex[0].patience=180;
+            testClick(480,270);require(!game.annex[0].customer&&game.heldCount==24);break;
+        case 58:
+            player.x=8.f;player.z=-1.6f;player.yaw=0;
+            game.annex[1].customer=true;game.annex[1].wholesale=true;game.annex[1].wanted=0;game.annex[1].quantity=24;game.annex[1].delivered=0;game.annex[1].patience=180;
+            testClick(480,270);require(!game.annex[1].customer&&game.held==-1);require(save());break;
+        case 59:
+            player.x=7.f;player.z=1;player.yaw=0;player.pitch=0;
+            for(auto& c:game.annex){c.customer=true;c.wholesale=true;c.wanted=4;c.quantity=24;c.delivered=0;c.patience=180;}
+            break;
+        case 60:key(SDLK_ESCAPE);activate(4);require(!running);break;
         }
     }
     void snapshot(int w,int h) {
@@ -378,7 +449,7 @@ public:
                 else renderHUD(game,player,false);
             }
             else renderMenu(menu,settings,hasSave);
-            if(smoke&&(frame==0||frame==5||frame==15||(frame>=18&&frame<=28)||frame==30||frame==32||(frame>=33&&frame<=45)))snapshot(w,h);
+            if(smoke&&(frame==0||frame==5||frame==15||(frame>=18&&frame<=28)||frame==30||frame==32||(frame>=33&&frame<=59)))snapshot(w,h);
             if(smoke&&glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL smoke test failed");
             SDL_GL_SwapWindow(window);++frame;
             if(!settings.vsync)SDL_Delay(8);

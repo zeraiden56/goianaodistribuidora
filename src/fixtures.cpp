@@ -12,18 +12,19 @@ float doorAngle(float remaining) {
 }
 void doorTransform(const Game& g,int product) {
     glTranslatef(stockLocations[product].x-.96f,0,2.78f);
-    glRotatef(doorAngle(g.fridgeTime[product==0?0:1]),0,1,0);
+    glRotatef(doorAngle(g.fridgeTime[product==0?0:product==2?1:product-2]),0,1,0);
 }
 }
 void renderRefrigerators(const Game& g) {
-    for(int p:{0,2}) {
+    for(int p:{0,2,4,5}) {
+        if(p>=g.availableProducts())continue;
         float x=stockLocations[p].x;
         box({x,1.32f,3.8f,2.08f,2.64f,.12f,.19f,.25f,.28f});
         for(float side:{-.99f,.99f})box({x+side,1.32f,3.3f,.1f,2.64f,1,.67f,.73f,.73f});
         for(float y:{.09f,2.62f})box({x,y,3.3f,2.08f,.15f,1,.61f,.69f,.69f});
         for(float y:{.25f,.91f,1.57f,2.23f})box({x,y,3.3f,1.85f,.045f,.87f,.67f,.78f,.76f});
         box({x,2.47f,3.13f,1.72f,.04f,.17f,.87f,.99f,.89f});
-        sign(x+.89f,2.98f,2.75f,p==0?"CERVEJAS GELADAS":"DESTILADOS",1.8f,true);
+        sign(x+.89f,2.98f,2.75f,g.products[p].name,1.8f,true);
         sign(x+.42f,2.73f,2.74f,g.stockLabel(p),.85f,true);
         for(int i=0;i<std::min(24,g.products[p].stock);++i)item(p,x-.76f+(i%6)*.3f,.47f+(i/6)*.66f,3.17f,.74f);
         glPushMatrix();doorTransform(g,p);
@@ -34,7 +35,8 @@ void renderRefrigerators(const Game& g) {
 }
 void renderFridgeGlass(const Game& g) {
     glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);
-    for(int p:{0,2}) {
+    for(int p:{0,2,4,5}) {
+        if(p>=g.availableProducts())continue;
         glPushMatrix();doorTransform(g,p);glColor4f(.43f,.73f,.8f,.15f);glBegin(GL_QUADS);
         glVertex3f(.035f,.11f,0);glVertex3f(1.885f,.11f,0);glVertex3f(1.885f,2.48f,0);glVertex3f(.035f,2.48f,0);glEnd();
         glColor4f(.85f,.96f,.98f,.19f);glBegin(GL_QUADS);

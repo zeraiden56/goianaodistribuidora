@@ -35,43 +35,55 @@ bool atomicWrite(const std::filesystem::path& file,const std::string& data,std::
 }
 }
 bool validGame(const Game& g,const Player& p) {
-    if(g.customerStyle<0||g.customerStyle>=customerLookCount||g.cash<0||g.cash>100000000||g.sold<0||g.sold>100000000||g.level<1||g.level>1000
+    if(g.customerStyle<0||g.customerStyle>=customerLookCount||g.cash<0||g.cash>2000000000||g.sold<0||g.sold>100000000||g.level<1||g.level>1000
         ||g.day<1||g.day>1000000||g.reputation<0||g.reputation>100
-        ||g.wanted<0||g.wanted>3||g.quantity<1||g.quantity>5||g.pending< -1||g.pending>3
-        ||g.held< -1||g.held>3||g.delivered<0||g.delivered>=g.quantity
+        ||g.wanted<0||g.wanted>=g.availableProducts()||g.quantity<1||g.quantity>(g.wholesale?60:5)||g.pending< -1||g.pending>=g.availableProducts()
+        ||g.held< -1||g.held>=g.availableProducts()||g.delivered<0||g.delivered>=g.quantity
         ||(!g.customer&&g.delivered!=0)||g.consumed<0||g.consumed>100000000
-        ||g.consuming< -1||g.consuming>2) return false;
-    if(!between(g.delivery,0,12)||!between(g.patience,0,65)||!between(g.arrival,0,4)
+        ||g.consuming< -1||g.consuming>=g.availableProducts()||g.consuming==3) return false;
+    if(!between(g.delivery,0,12)||!between(g.patience,0,g.wholesale?180:65)||!between(g.arrival,0,4)
         ||!between(g.time,0,180)||!between(g.intoxication,0,100)||!between(g.consumeTime,0,2)
-        ||!between(g.smokeTime,0,5)||(g.consumeTime>0&&(g.consuming<0||g.held!=-1))) return false;
-    if(g.bagCapacity<1||g.bagCapacity>5||(g.orderSize!=12&&g.orderSize!=24&&g.orderSize!=48)
-        ||(g.pendingUnits!=12&&g.pendingUnits!=24&&g.pendingUnits!=48)
+        ||!between(g.smokeTime,0,5)||(g.consumeTime>0&&(g.consuming<0))) return false;
+    if(g.bagCapacity<1||g.bagCapacity>5||!g.allowedLot(g.orderSize)
+        ||!g.allowedLot(g.pendingUnits)
         ||(!g.expanded&&(g.tvOn||g.secondCheckout||g.orderSize!=12||g.pendingUnits!=12))
         ||(g.secondHelper.hired&&(!g.secondCheckout||!g.helper.hired))
-        ||(g.bagCapacity>1&&!g.helper.hired))return false;
-    const auto& c=g.second;
-    if(c.wanted<0||c.wanted>3||c.quantity<1||c.quantity>5||c.delivered<0||c.delivered>=c.quantity
+        ||(g.largeStore&&!g.expanded)||(g.thirdCheckout&&(!g.largeStore||!g.secondCheckout))
+        ||(g.thirdHelper.hired&&(!g.thirdCheckout||!g.secondHelper.hired))
+        ||g.storageLevel<0||g.storageLevel>3||g.heldCount<1||g.heldCount>g.bagCapacity*(g.heldPacked?Game::crateUnits:1)|| (g.held<0&&g.heldCount!=1))return false;
+    if(g.annexCheckouts<0||g.annexCheckouts>2||(g.annexCheckouts>0&&!g.thirdCheckout)
+        ||g.staffSpeedLevel<0||g.staffSpeedLevel>3||(g.staffSpeedLevel>0&&!g.helper.hired)
+        ||(g.heldPacked&&(!g.largeStore||g.held<0))
+        ||(g.wholesale&&(!g.largeStore||g.quantity%Game::crateUnits!=0)))return false;
+    for(int lane=1;lane<5;++lane) {
+    const auto& c=lane==1?g.second:g.extraCheckout(lane);
+    if(c.wanted<0||c.wanted>=g.availableProducts()||c.quantity<1||c.quantity>(c.wholesale?60:5)||c.delivered<0||c.delivered>=c.quantity
+        ||(c.wholesale&&(!g.largeStore||c.quantity%Game::crateUnits!=0))
         ||c.customerStyle<0||c.customerStyle>=customerLookCount||(!c.customer&&c.delivered!=0)
-        ||(!g.secondCheckout&&c.customer)||!between(c.patience,0,65)||!between(c.arrival,0,4))return false;
-    for(const auto* worker:{&g.helper,&g.secondHelper}) {
-        const auto& h=*worker;int task=int(h.task);
-        if(task<0||task>3||h.held< -1||h.held>3||h.target< -1||h.target>3
-            ||!between(h.wait,0,1)||!walkable(h.x,h.z)||h.count<0||h.count>g.bagCapacity)return false;
+        ||(lane>=g.checkoutCount()&&c.customer)||!between(c.patience,0,c.wholesale?180:65)||!between(c.arrival,0,4))return false;
+    }
+    for(int lane=0;lane<5;++lane) {
+        const auto& h=g.staff(lane);int task=int(h.task);
+        if(h.hired&&(lane>=g.checkoutCount()||(lane>0&&!g.staff(lane-1).hired)))return false;
+        if(h.packed&&(!g.largeStore||h.held<0))return false;
+        if(task<0||task>3||h.held< -1||h.held>=g.availableProducts()||h.target< -1||h.target>=g.availableProducts()
+            ||!between(h.wait,0,1)||!walkable(h.x,h.z,g.expanded,g.largeStore)||h.count<0||h.count>g.bagCapacity*(h.packed?Game::crateUnits:1))return false;
         if((h.held<0&&h.count!=0)||(h.held>=0&&h.count<1))return false;
         if(!h.hired&&(h.held!=-1||task!=0||h.target!=-1))return false;
         if(task==0&&(h.held!=-1||h.target!=-1))return false;
         if(task==1&&(h.held!=-1||h.target<0))return false;
         if(task>=2&&(h.held<0||h.target!=h.held))return false;
     }
-    constexpr int base[]={48,36,24,36};
-    for(int i=0;i<4;++i) if(g.products[i].stock<0||g.products[i].capacity!=base[i]*(g.expanded?2:1)||g.occupied(i)>g.products[i].capacity)return false;
-    bool validPosition=p.seated?g.expanded&&std::abs(p.x-3.8f)<.001f&&std::abs(p.z-6.2f)<.001f:walkable(p.x,p.z,g.expanded);
+    for(int i=0;i<Game::productCount;++i)
+        if(g.products[i].stock<0||g.products[i].capacity!=g.capacityFor(i)||g.occupied(i)>g.products[i].capacity
+            ||(i>=g.availableProducts()&&g.products[i].stock!=0))return false;
+    bool validPosition=p.seated?g.expanded&&std::abs(p.x-3.8f)<.001f&&std::abs(p.z-6.2f)<.001f:walkable(p.x,p.z,g.expanded,g.largeStore);
     return validPosition&&between(p.yaw,-1000000,1000000)&&between(p.pitch,-70,70);
 }
 void encodeGame(std::ostream& out,const Game& g,const Player& p) {
-    out<<std::setprecision(9)<<"DISTRIBUIDORA_SAVE 4\n";
+    out<<std::setprecision(9)<<"DISTRIBUIDORA_SAVE 6\n";
     out<<g.cash<<' '<<g.sold<<' '<<g.level<<' '<<g.day<<' '<<g.reputation<<'\n';
-    for(auto product:g.products) out<<product.stock<<' ';
+    for(int i=0;i<4;++i) out<<g.products[i].stock<<' ';
     out<<'\n'<<g.wanted<<' '<<g.quantity<<' '<<g.pending<<' '<<g.held<<' '<<g.delivered<<' '
         <<g.customer<<' '<<g.reinforced<<'\n';
     out<<g.delivery<<' '<<g.patience<<' '<<g.arrival<<' '<<g.time<<'\n';
@@ -86,12 +98,24 @@ void encodeGame(std::ostream& out,const Game& g,const Player& p) {
     out<<c.customer<<' '<<c.wanted<<' '<<c.quantity<<' '<<c.delivered<<' '<<c.customerStyle<<' '<<c.patience<<' '<<c.arrival<<'\n';
     const auto& h2=g.secondHelper;
     out<<h2.hired<<' '<<h2.x<<' '<<h2.z<<' '<<h2.wait<<' '<<h2.held<<' '<<h2.target<<' '<<int(h2.task)<<' '<<h2.count<<'\n';
+    out<<g.largeStore<<' '<<g.thirdCheckout<<' '<<g.storageLevel<<' '<<g.heldCount<<' '<<g.products[4].stock<<' '<<g.products[5].stock<<'\n';
+    const auto& c3=g.third;const auto& h3=g.thirdHelper;
+    out<<c3.customer<<' '<<c3.wanted<<' '<<c3.quantity<<' '<<c3.delivered<<' '<<c3.customerStyle<<' '<<c3.patience<<' '<<c3.arrival<<'\n';
+    out<<h3.hired<<' '<<h3.x<<' '<<h3.z<<' '<<h3.wait<<' '<<h3.held<<' '<<h3.target<<' '<<int(h3.task)<<' '<<h3.count<<'\n';
+    out<<g.annexCheckouts<<' '<<g.staffSpeedLevel<<' '<<g.heldPacked<<' '<<g.wholesale<<' '<<g.second.wholesale<<' '<<g.third.wholesale<<'\n';
+    for(int lane=0;lane<5;++lane)out<<g.staff(lane).packed<<' ';
+    out<<'\n';
+    for(int lane=3;lane<5;++lane) {
+        const auto& c=g.extraCheckout(lane);const auto& h=g.staff(lane);
+        out<<c.customer<<' '<<c.wanted<<' '<<c.quantity<<' '<<c.delivered<<' '<<c.customerStyle<<' '<<c.patience<<' '<<c.arrival<<' '<<c.wholesale<<'\n';
+        out<<h.hired<<' '<<h.x<<' '<<h.z<<' '<<h.wait<<' '<<h.held<<' '<<h.target<<' '<<int(h.task)<<' '<<h.count<<'\n';
+    }
 }
 bool decodeGame(std::istream& in,Game& game,Player& player) {
     Game g;Player p;std::string magic;int version=0;
-    if(!(in>>magic>>version)||magic!="DISTRIBUIDORA_SAVE"||(version<1||version>4)) return false;
+    if(!(in>>magic>>version)||magic!="DISTRIBUIDORA_SAVE"||(version<1||version>6)) return false;
     in>>g.cash>>g.sold>>g.level>>g.day>>g.reputation;
-    for(auto& product:g.products) in>>product.stock;
+    for(int i=0;i<4;++i) in>>g.products[i].stock;
     in>>g.wanted>>g.quantity>>g.pending>>g.held>>g.delivered>>g.customer>>g.reinforced;
     in>>g.delivery>>g.patience>>g.arrival>>g.time;
     in>>g.consumed>>g.consuming>>g.intoxication>>g.consumeTime>>g.smokeTime;
@@ -109,7 +133,28 @@ bool decodeGame(std::istream& in,Game& game,Player& player) {
         in>>h.hired>>h.x>>h.z>>h.wait>>h.held>>h.target>>task>>h.count;
         h.task=static_cast<HelperTask>(task);
     } else g.helper.count=g.helper.held>=0?1:0;
+    if(version>=5) {
+        auto& c=g.third;auto& h=g.thirdHelper;int task=0;
+        in>>g.largeStore>>g.thirdCheckout>>g.storageLevel>>g.heldCount>>g.products[4].stock>>g.products[5].stock;
+        in>>c.customer>>c.wanted>>c.quantity>>c.delivered>>c.customerStyle>>c.patience>>c.arrival;
+        in>>h.hired>>h.x>>h.z>>h.wait>>h.held>>h.target>>task>>h.count;
+        h.task=static_cast<HelperTask>(task);
+    }
+    if(version>=6) {
+        in>>g.annexCheckouts>>g.staffSpeedLevel>>g.heldPacked>>g.wholesale>>g.second.wholesale>>g.third.wholesale;
+        for(int lane=0;lane<5;++lane)in>>g.staff(lane).packed;
+        for(int lane=3;lane<5;++lane) {
+            auto& c=g.extraCheckout(lane);auto& h=g.staff(lane);int task=0;
+            in>>c.customer>>c.wanted>>c.quantity>>c.delivered>>c.customerStyle>>c.patience>>c.arrival>>c.wholesale;
+            in>>h.hired>>h.x>>h.z>>h.wait>>h.held>>h.target>>task>>h.count;
+            h.task=static_cast<HelperTask>(task);
+        }
+    }
     g.refreshCapacity();
+    // The sofa terminal occupies floor that existed in older saves.
+    if(version<5&&g.expanded&&!p.seated&&p.x>1.85f&&p.x<2.95f&&p.z>7.05f&&p.z<7.85f) {
+        p.x=2.65f;p.z=6.2f;
+    }
     if(!in||!validGame(g,p)) return false;
     in>>std::ws;if(!in.eof()) return false;
     g.message="PROGRESSO CARREGADO.";game=g;player=p;return true;

@@ -1,5 +1,6 @@
 #include "interior.hpp"
 #include "render.hpp"
+#include "shop_layout.hpp"
 #include <SDL_opengl.h>
 #include <algorithm>
 #include <cmath>
@@ -37,7 +38,7 @@ void renderBackRoom(const Game& g) {
     box({2.9f,3.15f,4,2.6f,.9f,.2f,.69f,.65f,.44f});
     sign(3.95f,3.4f,3.87f,"DEPOSITO E DESCANSO",2.2f,true);
     for(int x=-5;x<5;++x)for(int z=4;z<10;++z)box({x+.5f,0,z+.5f,.98f,.04f,.98f,.42f,.4f,.34f});
-    for(float x:{-5.f,5.f})box({x,1.8f,7,.2f,3.6f,6,.46f,.53f,.46f});
+    for(float x:{-5.f,5.f})if(x<0||!g.largeStore)box({x,1.8f,7,.2f,3.6f,6,.46f,.53f,.46f});
     box({0,1.8f,10,10,3.6f,.2f,.49f,.56f,.46f});box({0,3.7f,7,10,.18f,6,.3f,.32f,.27f});
     box({0,3.57f,6.3f,2,.06f,.3f,.93f,.89f,.69f});
     for(int p=0;p<4;++p) {
@@ -58,14 +59,21 @@ void renderBackRoom(const Game& g) {
     for(float z:{5.02f,7.38f})box({3.87f,.75f,z,1.45f,.4f,.22f,.17f,.28f,.31f});
     for(float z:{5.65f,6.75f})box({3.74f,.77f,z,1.05f,.18f,1.05f,.25f,.39f,.4f});
     sign(3.21f,1.5f,7.12f,"SOFA - E SENTAR",1.85f,true);
+    // A second terminal is within reach from the sofa.
+    box({2.5f,.45f,7.4f,1.f,.85f,.65f,.37f,.27f,.18f});
+    box({2.5f,1.15f,7.5f,.75f,.55f,.12f,.17f,.19f,.2f});
+    box({2.5f,1.15f,7.425f,.64f,.43f,.025f,.04f,.4f,.42f});
+    box({2.5f,1.33f,7.405f,.64f,.07f,.02f,.08f,.12f,.6f});
+    box({2.5f,.9f,7.15f,.7f,.04f,.25f,.65f,.65f,.61f});
+    sign(2.93f,1.6f,7.41f,"COMPUTADOR",.95f,true);
     television(g);
 }
 void renderHelper(const Game& g) {
-    for(int lane=0;lane<2;++lane) {
-    const auto& h=lane?g.secondHelper:g.helper;
+    for(int lane=0;lane<g.checkoutCount();++lane) {
+    const auto& h=g.staff(lane);
     if(!h.hired)continue;
     glPushMatrix();glTranslatef(h.x,0,h.z);
-    float swing=h.route.empty()?0:std::sin(g.time*9)*.1f;
+    float swing=h.route.empty()?0:std::sin(g.time*(9+g.staffSpeedLevel*3))*.1f;
     box({0,1.15f,0,.58f,.75f,.33f,lane?.5f:.2f,lane?.5f:.35f,lane?.2f:.65f});
     box({0,1.7f,0,.36f,.4f,.35f,.59f,.39f,.26f});box({0,1.94f,0,.42f,.1f,.4f,.16f,.25f,.48f});
     box({0,1.25f,-.18f,.36f,.38f,.025f,.75f,.68f,.35f});
@@ -74,11 +82,38 @@ void renderHelper(const Game& g) {
         box({side*.38f,1.12f,0,.16f,.67f,.18f,.59f,.39f,.26f});
     }
     if(h.held>=0) {
+        if(h.packed) {
+            for(int i=0;i<std::min(3,(h.count+11)/12);++i)crate(h.held,.1f,.8f+i*.25f,-.35f,.65f);
+        } else {
         if(g.bagCapacity>1)box({.36f,.98f,-.32f,.5f,.5f,.38f,.7f,.62f,.38f});
         for(int i=0;i<h.count;++i)item(h.held,.2f+(i%3)*.13f,1.2f+(i/3)*.14f,-.27f,.45f);
+        }
     }
     glPopMatrix();
-    sign(h.x-.48f,2.25f,h.z+.05f,"ATENDENTE "+std::to_string(lane+1)+" - "+std::to_string(h.count)+"/"+std::to_string(g.bagCapacity),1.5f);
-    sign(h.x+.48f,2.25f,h.z-.05f,"ATENDENTE "+std::to_string(lane+1)+" - "+std::to_string(h.count)+"/"+std::to_string(g.bagCapacity),1.5f,true);
+    sign(h.x-.48f,2.25f,h.z+.05f,"ATENDENTE "+std::to_string(lane+1)+" - "+carriedLabel(h.count,h.packed),1.5f);
+    sign(h.x+.48f,2.25f,h.z-.05f,"ATENDENTE "+std::to_string(lane+1)+" - "+carriedLabel(h.count,h.packed),1.5f,true);
+    }
+}
+
+void renderAnnex(const Game& g) {
+    if(!g.largeStore)return;
+    for(int x=5;x<9;++x)for(int z=-4;z<10;++z)
+        box({x+.5f,0,z+.5f,.98f,.04f,.98f,.44f,.48f,.4f});
+    box({9,1.8f,3,.2f,3.6f,14,.58f,.64f,.48f});
+    box({7,1.8f,10,4,3.6f,.2f,.49f,.56f,.46f});
+    box({7,3.7f,3,4,.18f,14,.29f,.32f,.28f});
+    box({7,.55f,-2.6f,4,1.1f,.9f,.17f,.32f,.29f});
+    box({7,1.15f,-2.6f,4,.15f,1.1f,.65f,.52f,.32f});
+    box({6.7f,1.8f,4,4.6f,3.6f,.15f,.49f,.56f,.46f});
+    box({6.8f,3.55f,0,1.9f,.06f,.3f,.91f,.96f,.81f});
+    box({6.8f,3.55f,6.4f,1.9f,.06f,.3f,.91f,.96f,.81f});
+    sign(5.5f,3.3f,-2.84f,"ATACADO - GOIANÃO",3.f);
+    for(int p=4;p<6;++p) {
+        float x=p==4?5.9f:8.f;
+        sign(x+.8f,2.8f,8.61f,g.products[p].name,1.6f,true);
+        sign(x+.5f,2.44f,8.6f,g.stockLabel(p),1.f,true);
+        for(float y:{.2f,1.2f})box({x,y,9.15f,1.85f,.09f,.85f,.2f,.26f,.24f});
+        for(int i=0;i<std::min(8,(g.products[p].stock+5)/6);++i)
+            box({x-.63f+(i%4)*.42f,.53f+(i/4),9.15f,.37f,.55f,.6f,.5f,p==4?.4f:.6f,.2f});
     }
 }

@@ -7,24 +7,33 @@
 
 struct Product {const char* name; int cost,price,stock,capacity;};
 struct Checkout {
-    bool customer=false;
+    bool customer=false,wholesale=false;
     int wanted=0,quantity=1,delivered=0,customerStyle=1;
     float patience=65,arrival=4;
 };
 struct Game {
-    std::array<Product,4> products{{{"CERVEJA",4,8,18,48},{"CIGARRO",7,12,10,36},
-        {"DESTILADO",18,30,6,24},{"GELO",3,7,12,36}}};
+    static constexpr int productCount=6;
+    std::array<Product,productCount> products{{{"CERVEJA",4,8,18,48},{"CIGARRO",7,12,10,36},
+        {"DESTILADO",18,30,6,24},{"GELO",3,7,12,36},
+        {"CERVEJA LATA",3,6,0,48},{"REFRIGERANTE",5,10,0,48}}};
     static constexpr int expansionCost=600,helperCost=350;
     bool expanded=false,tvOn=false;
-    HelperState helper,secondHelper;
-    Checkout second;
-    bool secondCheckout=false;
+    HelperState helper,secondHelper,thirdHelper;
+    Checkout second,third;
+    std::array<Checkout,2> annex;
+    std::array<HelperState,2> annexHelpers;
+    int annexCheckouts=0,staffSpeedLevel=0;
+    bool wholesale=false,heldPacked=false;
+    static constexpr int crateUnits=12;
+    bool secondCheckout=false,thirdCheckout=false,largeStore=false;
+    int storageLevel=0,heldCount=1;
+    static constexpr int largeExpansionCost=1200,thirdCheckoutCost=750;
     int bagCapacity=1,orderSize=12,pendingUnits=12;
     static constexpr int checkoutCost=500;
     int cash=250,sold=0,level=1,day=1,reputation=100;
     int wanted=0,quantity=2,pending=-1,held=-1,delivered=0;
     int consumed=0,consuming=-1,customerStyle=0;
-    std::array<float,2> fridgeTime{}; // Transient door animation, no inventory state.
+    std::array<float,4> fridgeTime{}; // Transient door animation, no inventory state.
     float delivery=0,patience=65,arrival=2,time=0;
     float intoxication=0,consumeTime=0,smokeTime=0;
     bool customer=false;
@@ -32,6 +41,22 @@ struct Game {
     std::string message="PEGUE OS PRODUTOS COM E E LEVE AO CAIXA A ESQUERDA.";
     std::mt19937 random{42};
     bool order(int i);
+    int availableProducts() const {return largeStore?productCount:4;}
+    int capacityFor(int i) const;
+    int expansionPrice() const {return expanded?largeExpansionCost:expansionCost;}
+    int checkoutPrice() const {return checkoutCount()>=3?1000+annexCheckouts*250:secondCheckout?thirdCheckoutCost:checkoutCost;}
+    int checkoutCount() const {return thirdCheckout?3+annexCheckouts:secondCheckout?2:1;}
+    Checkout& extraCheckout(int lane) {return lane==2?third:annex[lane-3];}
+    const Checkout& extraCheckout(int lane) const {return lane==2?third:annex[lane-3];}
+    HelperState& staff(int lane) {return lane==0?helper:lane==1?secondHelper:lane==2?thirdHelper:annexHelpers[lane-3];}
+    const HelperState& staff(int lane) const {return lane==0?helper:lane==1?secondHelper:lane==2?thirdHelper:annexHelpers[lane-3];}
+    int staffCount() const;
+    float staffSpeed() const {return 1.8f+staffSpeedLevel*.9f;}
+    bool upgradeStaffSpeed();
+    bool allowedLot(int units) const;
+    int lotDiscount() const;
+    bool upgradeStorage();
+    bool deliverPlayer(int lane=0);
     int orderCost(int i) const;
     int marginBonus() const;
     int salePrice(int i) const;
@@ -39,7 +64,7 @@ struct Game {
     bool upgradeBag();
     bool cycleOrderSize();
     void tickCustomer(float dt,int lane);
-    bool pickup(int i,bool frontStorage=true);
+    bool pickup(int i,bool frontStorage=true,bool packed=false);
     bool sell();
     bool deliver(int& carried,int lane=0);
     bool expand();

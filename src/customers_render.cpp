@@ -1,13 +1,14 @@
 #include "render.hpp"
+#include "shop_layout.hpp"
 #include "customers.hpp"
 #include <SDL_opengl.h>
 #include <cmath>
 
 void renderCustomer(const Game& g) {
-    for(int lane=0;lane<(g.secondCheckout?2:1);++lane) {
-    if(!(lane?g.second.customer:g.customer))continue;
-    const auto& c=customerLooks()[lane?g.second.customerStyle:g.customerStyle];
-    glPushMatrix();glTranslatef(lane?2.1f:-2.1f,0,-3.8f);glScalef(c.width,c.height,1);
+    for(int lane=0;lane<g.checkoutCount();++lane) {
+    if(!(lane>=2?g.extraCheckout(lane).customer:lane?g.second.customer:g.customer))continue;
+    const auto& c=customerLooks()[lane>=2?g.extraCheckout(lane).customerStyle:lane?g.second.customerStyle:g.customerStyle];
+    glPushMatrix();glTranslatef(checkoutX(lane),0,-3.8f);glScalef(c.width,c.height,1);
     auto skin=c.skin,shirt=c.shirt,pants=c.trousers,hair=c.hair;
     box({0,1.2f,0,.62f,.76f,.35f,shirt[0],shirt[1],shirt[2]});
     for(float side:{-1.f,1.f}) {
