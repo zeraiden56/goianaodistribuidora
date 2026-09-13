@@ -15,6 +15,7 @@
 /distribuidora
 /distribuidora_tests
 /distribuidora_audio_tests
+/distribuidora_supplier_tests
 *.o
 *.obj
 *.a

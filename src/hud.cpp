@@ -41,6 +41,7 @@ void renderHUD(const Game& g,const Player& p,bool) {
         bar(658,y+54,270,patience/(wholesale?180.f:65.f),patience<15?.95f:.4f,patience<15?.35f:.75f,.36f);
     }
     if(g.pending>=0){panel(18,274,230,28);text(30,285,"ENTREGA "+std::to_string(g.pendingUnits)+" UN. EM "+std::to_string(int(std::ceil(g.delivery)))+" S",1.1f);}
+    else if(g.autoRestockEnabled){panel(18,274,230,28);text(30,285,"AUTO LIGADO - LIMIAR "+std::to_string(g.restockThreshold)+"%",1.1f);}
     if(g.intoxication>0){panel(18,310,230,31);text(30,318,"EMBRIAGUEZ "+std::to_string(int(g.intoxication)),1.1f);bar(30,331,205,g.intoxication/100,.76f,.5f,.3f);}
     for(int lane=0;lane<g.checkoutCount();++lane) {
         const auto& h=g.staff(lane);if(!h.hired)continue;

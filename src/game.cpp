@@ -3,15 +3,6 @@
 #include <cstdint>
 #include "shop_layout.hpp"
 
-bool Game::order(int i) {
-        if(i<0 || i>=availableProducts()) {message="PRODUTO LIBERADO NA SEGUNDA AMPLIACAO.";return false;}
-        if(!allowedLot(orderSize))return false;
-        if(pending!=-1) {message="AGUARDE A ENTREGA ATUAL."; return false;}
-        if(cash<orderCost(i)) {message="SALDO INSUFICIENTE."; return false;}
-        if(occupied(i)+orderSize>products[i].capacity) {message="SEM ESPACO PARA ESTE LOTE. VENDA OU REDUZA O LOTE."; return false;}
-        cash-=orderCost(i); pending=i; pendingUnits=orderSize; delivery=12;
-        message="ENCOMENDA PAGA. ENTREGA EM 12 SEGUNDOS."; return true;
-    }
 bool Game::pickup(int i,bool frontStorage,bool packed) {
         if(i<0 || i>=availableProducts()) {message="PRODUTO LIBERADO NA SEGUNDA AMPLIACAO.";return false;}
         if(consumeTime>0) {message="AGUARDE TERMINAR DE CONSUMIR."; return false;}
@@ -57,11 +48,12 @@ void Game::tick(float dt) {
         consumeTime=std::max(0.f,consumeTime-dt);
         smokeTime=std::max(0.f,smokeTime-dt);
         intoxication=std::max(0.f,intoxication-dt*.5f);
-        if(pending!=-1) { delivery-=dt; if(delivery<=0) {products[pending].stock+=pendingUnits; pending=-1; delivery=0; message="ENTREGA RECEBIDA: "+std::to_string(pendingUnits)+" UNIDADES NO ESTOQUE.";pendingUnits=12;} }
+        if(pending!=-1) {delivery=std::max(0.f,delivery-dt);if(delivery==0)receiveDelivery();}
         time+=dt;
         if(time>=180) {time-=180; ++day; message="NOVO DIA! CONTINUE EXPANDINDO A LOJA.";}
         tickCustomer(dt,0);tickHelper(*this,dt,0);
         for(int lane=1;lane<checkoutCount();++lane){tickCustomer(dt,lane);tickHelper(*this,dt,lane);}
+        tickRestock(dt);
     }
 void Game::tickCustomer(float dt,int lane) {
     auto& customer=lane>=2?extraCheckout(lane).customer:lane?second.customer:this->customer;
@@ -153,10 +145,14 @@ bool Game::upgradeLevel() {
 bool Game::allowedLot(int units) const {
     return units==12||(expanded&&(units==24||units==48))||(largeStore&&(units==96||units==192||units==288));
 }
-int Game::lotDiscount() const {
-    return orderSize==288?35:orderSize==192?30:orderSize==96?25:orderSize==48?20:orderSize==24?10:0;
+int Game::lotDiscount(int units) const {
+    if(units==0)units=orderSize;
+    return units==288?35:units==192?30:units==96?25:units==48?20:units==24?10:0;
 }
-int Game::orderCost(int i) const {return (products[i].cost*orderSize*(100-lotDiscount())+99)/100;}
+int Game::orderCost(int i,int units) const {
+    if(units==0)units=orderSize;
+    return (products[i].cost*units*(100-lotDiscount(units))+99)/100;
+}
 int Game::marginBonus() const {return (day-1)*2+(level-1)*5;}
 int Game::salePrice(int i) const {
     return products[i].price+((products[i].price-products[i].cost)*marginBonus()+50)/100;

@@ -1,15 +1,17 @@
 #include "computer.hpp"
-const std::array<ComputerButton,16>& computerButtons() {
-    static const std::array<ComputerButton,16> buttons{{
+const std::array<ComputerButton,20>& computerButtons() {
+    static const std::array<ComputerButton,20> buttons{{
         {96,170,470,29,ComputerAction::Beer},{96,203,470,29,ComputerAction::Cigarettes},
         {96,236,470,29,ComputerAction::Spirits},{96,269,470,29,ComputerAction::Ice},
         {588,151,274,25,ComputerAction::Cameras},{588,180,274,25,ComputerAction::Level},
         {588,209,274,25,ComputerAction::Expansion},{588,238,274,25,ComputerAction::Helper},
-        {711,429,151,31,ComputerAction::Close},
+        {711,463,151,27,ComputerAction::Close},
         {96,370,470,23,ComputerAction::Lot},{588,267,274,25,ComputerAction::Checkout},
         {588,296,274,25,ComputerAction::Bag},
         {96,302,470,29,ComputerAction::CanBeer},{96,335,470,29,ComputerAction::Soda},
-        {588,325,274,25,ComputerAction::Storage},{588,354,274,25,ComputerAction::Speed}
+        {588,325,274,25,ComputerAction::Storage},{588,354,274,25,ComputerAction::Speed},
+        {96,429,220,27,ComputerAction::AutoRestock},{326,429,230,27,ComputerAction::RestockThreshold},
+        {566,429,296,27,ComputerAction::RestockReserve},{96,463,460,27,ComputerAction::Delivery}
     }};
     return buttons;
 }
@@ -61,6 +63,10 @@ std::string computerUnavailable(const Game& g,ComputerAction action) {
         if(g.staffSpeedLevel==3)return "EQUIPE NA VELOCIDADE MAXIMA.";
         if(g.staffCount()==0)return "CONTRATE UM ATENDENTE PRIMEIRO.";
         if(g.cash<400*(g.staffSpeedLevel+1))return "SALDO INSUFICIENTE PARA TREINAMENTO.";
+    }
+    if(action==ComputerAction::Delivery) {
+        if(g.deliveryLevel==3)return "ENTREGA INSTANTANEA JA LIBERADA.";
+        if(g.cash<g.deliveryUpgradeCost())return "SALDO INSUFICIENTE PARA MELHORAR A ENTREGA.";
     }
     return {};
 }

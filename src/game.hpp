@@ -29,6 +29,11 @@ struct Game {
     int storageLevel=0,heldCount=1;
     static constexpr int largeExpansionCost=1200,thirdCheckoutCost=750;
     int bagCapacity=1,orderSize=12,pendingUnits=12;
+    int deliveryLevel=0,restockThreshold=25,restockReserve=0,restockCursor=0;
+    bool autoRestockEnabled=false;
+    float restockTimer=0;
+    unsigned deliveriesReceived=0; // Transient notification counter, never an economic balance.
+    std::string restockStatus="REPOSICAO AUTOMATICA DESLIGADA.";
     static constexpr int checkoutCost=500;
     int cash=250,sold=0,level=1,day=1,reputation=100;
     int wanted=0,quantity=2,pending=-1,held=-1,delivered=0;
@@ -40,7 +45,15 @@ struct Game {
     bool reinforced=false; // Legacy save field; secondCheckout controls the new upgrade.
     std::string message="PEGUE OS PRODUTOS COM E E LEVE AO CAIXA A ESQUERDA.";
     std::mt19937 random{42};
-    bool order(int i);
+    bool order(int i,int units=0);
+    int deliverySeconds() const {return deliveryLevel==0?12:deliveryLevel==1?6:deliveryLevel==2?3:0;}
+    int deliveryUpgradeCost() const {return deliveryLevel==0?300:deliveryLevel==1?600:1200;}
+    bool upgradeDelivery();
+    bool toggleAutoRestock();
+    void cycleRestockThreshold();
+    void cycleRestockReserve();
+    void receiveDelivery();
+    void tickRestock(float dt);
     int availableProducts() const {return largeStore?productCount:4;}
     int capacityFor(int i) const;
     int expansionPrice() const {return expanded?largeExpansionCost:expansionCost;}
@@ -54,10 +67,10 @@ struct Game {
     float staffSpeed() const {return 1.8f+staffSpeedLevel*.9f;}
     bool upgradeStaffSpeed();
     bool allowedLot(int units) const;
-    int lotDiscount() const;
+    int lotDiscount(int units=0) const;
     bool upgradeStorage();
     bool deliverPlayer(int lane=0);
-    int orderCost(int i) const;
+    int orderCost(int i,int units=0) const;
     int marginBonus() const;
     int salePrice(int i) const;
     bool upgradeCheckout();

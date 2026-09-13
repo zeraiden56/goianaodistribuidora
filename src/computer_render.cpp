@@ -12,13 +12,13 @@ void black(float x,float y,const std::string& label,float size=1.5f){text(x,y,la
 }
 void renderComputer(const Game& g,const ComputerUI& ui) {
     rect(0,0,960,540,0,.38f,.39f);
-    bevel(72,36,816,442);rect(77,41,806,30,.02f,.05f,.43f);
+    bevel(72,36,816,465);rect(77,41,806,30,.02f,.05f,.43f);
     text(90,50,"GOIANÃO DISTRIBUIDORA - GERENCIAMENTO",1.8f,1,1,1);
     bevel(850,44,29,24);black(860,51,"X",1.5f);
     black(93,89,"DISPONIVEL",1.2f);black(93,109,"R$ "+std::to_string(g.cash)+",00",2.4f);
     black(440,87,"LUCRO BASE +"+std::to_string(g.marginBonus())+"% - DIA E NIVEL",1.25f);
     black(440,105,"SACOLA JOGADOR E EQUIPE: "+std::to_string(g.bagCapacity)+" UN. OU CX DE 12",1.2f);
-    black(440,121,g.pending>=0?"ENTREGA: "+std::to_string(g.pendingUnits)+" UN. EM "+std::to_string(int(std::ceil(g.delivery)))+" S":"ENTREGAS EM 12 S - PAGAMENTO NA HORA",1.1f);
+    black(440,121,g.pending>=0?"ENTREGA: "+std::to_string(g.pendingUnits)+" UN. EM "+std::to_string(int(std::ceil(g.delivery)))+" S":g.deliverySeconds()==0?"ENTREGA INSTANTANEA - PAGAMENTO NA HORA":"ENTREGAS EM "+std::to_string(g.deliverySeconds())+" S - PAGAMENTO NA HORA",1.1f);
     bevel(91,139,480,224,true);black(103,151,"PRODUTO",1.3f);black(275,151,"ESTOQUE",1.2f);black(359,151,"VENDA",1.2f);black(436,151,"LOTE "+std::to_string(g.orderSize),1.2f);
     black(590,130,"SERVICOS DA LOJA",1.4f);
     auto buttons=computerButtons();
@@ -43,15 +43,19 @@ void renderComputer(const Game& g,const ComputerUI& ui) {
                 i==10?(g.checkoutCount()==5?"5 CAIXAS ABERTOS":"CAIXA "+std::to_string(g.checkoutCount()+1)+" + GRADE - R$ "+std::to_string(g.checkoutPrice())):
                 i==11?(g.bagCapacity==5?"SACOLAS MAXIMAS: 5 UN.":"SACOLA "+std::to_string(g.bagCapacity+1)+" UN. - R$ "+std::to_string(g.bagCapacity*100)):
                 i==14?(g.storageLevel==3?"ESTOQUE NO MAXIMO":"ESTOQUE + - R$ "+std::to_string(250*(g.storageLevel+1))):
-                g.staffSpeedLevel==3?"CORRIDA DA EQUIPE MAXIMA":"CORRIDA "+std::to_string(g.staffSpeedLevel+1)+" - R$ "+std::to_string(400*(g.staffSpeedLevel+1));
+                i==15?(g.staffSpeedLevel==3?"CORRIDA DA EQUIPE MAXIMA":"CORRIDA "+std::to_string(g.staffSpeedLevel+1)+" - R$ "+std::to_string(400*(g.staffSpeedLevel+1))):
+                i==16?(g.autoRestockEnabled?"REPOSICAO AUTO: LIGADA":"REPOSICAO AUTO: DESLIGADA"):
+                i==17?"REPOR COM ESTOQUE ATE "+std::to_string(g.restockThreshold)+"%":
+                i==18?"RESERVAR NO CAIXA: R$ "+std::to_string(g.restockReserve):
+                g.deliveryLevel==3?"ENTREGA INSTANTANEA ATIVA":"ENTREGA "+std::to_string(g.deliveryLevel==0?6:g.deliveryLevel==1?3:0)+" S - R$ "+std::to_string(g.deliveryUpgradeCost());
             text(b.x+10,b.y+9,label,i==9?1.1f:1.25f,ink,ink,ink);
         }
     }
     bevel(91,393,775,27,true);
     std::string notice=computerUnavailable(g,buttons[ui.selected].action);
-    if(notice.empty())notice=g.message;
+    if(notice.empty())notice=ui.selected>=16&&ui.selected<=18?g.restockStatus:g.message;
     black(100,402,notice.substr(0,84),1.3f);
-    black(97,434,"SETAS OU TAB SELECIONAM - ENTER CONFIRMA",1.25f);black(97,452,"E FECHAR / ESC PAUSAR - O TEMPO CONTINUA",1.1f);
+    black(575,468,"TAB / ENTER",1.f);black(575,482,"E FECHAR",1.f);
     bevel(0,509,960,31);bevel(8,513,180,23);black(18,521,"GOIANÃO 98",1.3f);
     black(803,521,"22:"+(int(g.time/3)<10?std::string("0"):std::string())+std::to_string(int(g.time/3)),1.4f);
 }

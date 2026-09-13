@@ -113,6 +113,7 @@ public:
         desktop.selected=index;auto action=computerButtons()[index].action;
         auto unavailable=computerUnavailable(game,action);
         if(!unavailable.empty()){game.message=unavailable;return;}
+        auto deliveriesBefore=game.deliveriesReceived;
         if(computerProduct(action)>=0)game.order(computerProduct(action));
         else if(action==ComputerAction::Cameras){surveillance=true;camera=0;capture();}
         else if(action==ComputerAction::Level)game.upgradeLevel();
@@ -123,7 +124,12 @@ public:
         else if(action==ComputerAction::Bag)game.upgradeBag();
         else if(action==ComputerAction::Storage)game.upgradeStorage();
         else if(action==ComputerAction::Speed)game.upgradeStaffSpeed();
+        else if(action==ComputerAction::AutoRestock)game.toggleAutoRestock();
+        else if(action==ComputerAction::RestockThreshold)game.cycleRestockThreshold();
+        else if(action==ComputerAction::RestockReserve)game.cycleRestockReserve();
+        else if(action==ComputerAction::Delivery)game.upgradeDelivery();
         else if(action==ComputerAction::Close){computer=false;capture();}
+        if(game.deliveriesReceived!=deliveriesBefore)audio.play(Sound::Delivery);
     }
     void interact(bool clicked=false,bool packed=false) {
         int target=interaction(player.x,player.z,player.yaw,game.expanded,game.secondCheckout,game.largeStore,game.thirdCheckout,game.annexCheckouts);
@@ -235,10 +241,11 @@ public:
     }
     void update(float dt) {
         if(menu.screen!=Screen::Playing)return;
-        int pendingBefore=game.pending,soldBefore=game.sold;
+        int soldBefore=game.sold;
+        auto deliveriesBefore=game.deliveriesReceived;
         game.tick(dt);autosave+=dt;
         if(game.sold>soldBefore)game.message=audio.payment()?"AUXILIAR: VENDA CONCLUIDA NO CARTAO.":"AUXILIAR: VENDA CONCLUIDA EM DINHEIRO.";
-        if(pendingBefore!=-1&&game.pending==-1)audio.play(Sound::Delivery);
+        if(game.deliveriesReceived!=deliveriesBefore)audio.play(Sound::Delivery);
         if(!computer) {
             auto keys=SDL_GetKeyboardState(nullptr);
             float f=float(keys[SDL_SCANCODE_W]-keys[SDL_SCANCODE_S]),s=float(keys[SDL_SCANCODE_D]-keys[SDL_SCANCODE_A]);
@@ -395,7 +402,32 @@ public:
             player.x=7.f;player.z=1;player.yaw=0;player.pitch=0;
             for(auto& c:game.annex){c.customer=true;c.wholesale=true;c.wanted=4;c.quantity=24;c.delivered=0;c.patience=180;}
             break;
-        case 60:key(SDLK_ESCAPE);activate(4);require(!running);break;
+        case 60:
+            player.x=2.1f;player.z=1.8f;player.yaw=1.5707963f;key(SDLK_e);require(computer);
+            game.cash=50000;
+            for(int i=0;i<Game::productCount;++i)game.products[i].stock=game.products[i].capacity-(game.occupied(i)-game.products[i].stock);
+            game.products[0].stock=0;
+            testComputerClick(19);testComputerClick(19);require(game.deliverySeconds()==3);
+            testComputerClick(0);require(game.pending==0&&game.delivery<=3);
+            testComputerClick(19);require(game.deliverySeconds()==0&&game.pending==-1&&game.products[0].stock==288);break;
+        case 61:
+            testComputerClick(17);testComputerClick(18);testComputerClick(16);
+            require(game.restockThreshold==50&&game.restockReserve==250&&game.autoRestockEnabled);
+            game.products[5].stock=0;game.tick(.01f);require(game.products[5].stock==288&&game.pending==-1);break;
+        case 62:
+            key(SDLK_e);require(!computer);game.products[4].stock=0;game.tick(1.1f);
+            require(game.products[4].stock==288);require(save());break;
+        case 63: {
+            key(SDLK_ESCAPE);game.products[0].stock=0;game.restockTimer=0;int before=game.cash;
+            update(2);require(game.cash==before&&game.products[0].stock==0);
+            key(SDLK_ESCAPE);update(.1f);require(game.products[0].stock>=288);break;
+        }
+        case 64: {
+            key(SDLK_e);require(computer);testComputerClick(16);require(!game.autoRestockEnabled);
+            game.products[4].stock=0;int before=game.cash;game.tickRestock(2);
+            require(game.products[4].stock==0&&game.cash==before);require(save());break;
+        }
+        case 65:key(SDLK_ESCAPE);activate(4);require(!running);break;
         }
     }
     void snapshot(int w,int h) {
@@ -449,7 +481,7 @@ public:
                 else renderHUD(game,player,false);
             }
             else renderMenu(menu,settings,hasSave);
-            if(smoke&&(frame==0||frame==5||frame==15||(frame>=18&&frame<=28)||frame==30||frame==32||(frame>=33&&frame<=59)))snapshot(w,h);
+            if(smoke&&(frame==0||frame==5||frame==15||(frame>=18&&frame<=28)||frame==30||frame==32||(frame>=33&&frame<=64)))snapshot(w,h);
             if(smoke&&glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL smoke test failed");
             SDL_GL_SwapWindow(window);++frame;
             if(!settings.vsync)SDL_Delay(8);

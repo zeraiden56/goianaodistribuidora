@@ -72,7 +72,7 @@ Para usar outra pasta de dados:
 - A sacola do jogador carrega de uma a cinco unidades do mesmo produto por viagem. A retirada preenche a sacola até o limite ou até acabar o estoque. Para devolver todas as unidades restantes, olhe para o local de origem e pressione **E** ou clique novamente. Para trocar de produto, entregue ou devolva o conteúdo atual.
 - Leve a sacola à abertura do caixa escolhido e pressione **E** ou clique. Você entrega apenas a quantidade que falta no pedido; o excedente continua na sacola. O pagamento ocorre quando o pedido está completo.
 - Produtos errados são recusados. Se o cliente desistir, as unidades do balcão voltam ao estoque; o produto na sua mão continua com você.
-- No computador à direita, **E** abre/fecha o fornecedor. **1–4** encomendam o lote selecionado (inicialmente 12 unidades), pagas na hora e entregues automaticamente após 12 segundos. Há uma entrega por vez. Produtos na mão, no balcão e a caminho reservam espaço, para que devoluções não ultrapassem a capacidade.
+- No computador à direita, **E** abre/fecha o fornecedor. **1–6** encomendam o lote selecionado (inicialmente 12 unidades), pago na hora. A entrega começa em 12 segundos e pode ser melhorada até ficar instantânea. Há uma entrega por vez. Produtos na mão, no balcão e a caminho reservam espaço, para que devoluções não ultrapassem a capacidade.
 - No computador, **U** melhora o nível da loja, aumenta os pedidos até cinco unidades e melhora o lucro. Após ampliar a loja, o botão **Grade + Caixa 2** abre outra passagem de atendimento. A compra não altera o estoque.
 - O tempo continua no fornecedor. **Esc** fecha o fornecedor e abre a pausa.
 
@@ -97,6 +97,20 @@ O HUD possui painéis compactos: estoque com indicadores de capacidade e estoque
 
 Há **oito aparências de clientes**, com nomes, roupas, alturas, cabelos, tons de pele e acessórios diferentes. A seleção varia a cada chegada, evitando repetir a mesma aparência consecutivamente. A aparência do cliente atual é salva; saves das versões anteriores continuam compatíveis.
 
+## Abastecimento automático e entrega
+
+Na parte inferior do computador, ative **Reposição automática** e configure:
+
+- **Estoque mínimo:** 10%, 25% ou 50% da capacidade. Quando um produto chega nesse limite ou abaixo dele, o computador tenta comprá-lo. O padrão é 25%.
+- **Reserva de dinheiro:** R$ 0, 250, 500, 1.000 ou 2.500. As compras automáticas preservam esse saldo; compras manuais continuam livres para usá-lo.
+- **Lote:** o seletor existente define o máximo por compra automática. O computador escolhe o maior lote liberado que caiba no estoque e no orçamento, com o desconto correspondente; se necessário, compra um lote menor.
+
+A reposição começa desligada. Quando ligada, verifica o estoque uma vez por segundo, prioriza os produtos proporcionalmente mais próximos de acabar e faz no máximo um novo pedido por verificação. Respeita produtos desbloqueados, mercadorias reservadas nas sacolas e balcões, e a entrega já em andamento. Sem saldo ou espaço suficiente, espera e tenta novamente. Desligá-la não cancela uma encomenda já paga.
+
+O botão de **entrega** oferece três melhorias consecutivas: **R$ 300 → 6 segundos**, **R$ 600 → 3 segundos** e **R$ 1.200 → entrega instantânea**. Elas também reduzem o tempo restante da encomenda atual; a última recebe essa encomenda imediatamente, sem cobrar os produtos novamente.
+
+A programação funciona com o computador fechado, nas câmeras e enquanto você descansa no sofá. Para no menu de pausa. As configurações e as melhorias são salvas com a partida.
+
 ## Expansão, auxiliar e descanso
 
 No computador:
@@ -104,13 +118,13 @@ No computador:
 - **B — Primeira ampliação: R$ 600.** Abre uma passagem ao lado das geladeiras, à direita, para um novo cômodo nos fundos. A expansão inclui depósito, sofá e TV. A capacidade total dobra para cerveja 96, cigarro 72, destilado 48 e gelo 72. A compra **não repõe mercadorias**.
 - **H — Contratar atendente: R$ 350 por funcionário.** O primeiro está disponível antes da expansão. O mesmo botão contrata os próximos funcionários, até cinco, após a abertura dos respectivos caixas. Cada um atende seu próprio caixa. Não há salário diário.
 
-O auxiliar anda até a geladeira, o nicho de cigarros ou o freezer, pega até a capacidade da sacola (e somente o que falta no pedido) e leva ao seu caixa. Ele completa pedidos e recebe o pagamento automaticamente. Se você terminar um pedido enquanto ele busca outra unidade, ou se o cliente desistir, ele devolve o produto. Sem estoque, ele espera reposição: as encomendas continuam sendo sua responsabilidade. Seu estado aparece no HUD e ele é visível no cenário e nas câmeras. Ele não bloqueia a passagem do jogador.
+O auxiliar anda até a geladeira, o nicho de cigarros ou o freezer, pega até a capacidade da sacola (e somente o que falta no pedido) e leva ao seu caixa. Ele completa pedidos e recebe o pagamento automaticamente. Se você terminar um pedido enquanto ele busca outra unidade, ou se o cliente desistir, ele devolve o produto. Sem estoque, ele espera reposição: você pode encomendar manualmente ou programar a reposição automática no computador. Seu estado aparece no HUD e ele é visível no cenário e nas câmeras. Ele não bloqueia a passagem do jogador.
 
 As prateleiras do depósito são interativas: aproxime-se, olhe para o produto e pressione **E** para pegar ou devolver. O depósito e a área de vendas compartilham o mesmo inventário; as caixas nos fundos representam mercadorias existentes, sem criar estoque extra.
 
 Aproxime-se do sofá nos fundos e pressione **E** para sentar. Você pode olhar ao redor com o mouse; **E** levanta e **T** liga/desliga a TV. Sentado, **C** abre o computador. Também é possível olhar para a tela do terminal na mesa perto do sofá e clicar, ou pressionar **E**, para abri-lo. Fechar o computador mantém você sentado. Para levantar com **E**, olhe para fora do terminal. A televisão exibe uma animação original de futebol, sem áudio de programa. Também pode ser ligada/desligada com **E** ao se aproximar da tela. Enquanto você descansa, clientes, encomendas e auxiliar continuam ativos. **Esc** pausa tudo normalmente.
 
-As duas expansões, as melhorias de estoque, os cinco caixas e seus pedidos, os atendentes e o jogador com suas sacolas, os seis produtos, a encomenda com sua quantidade original, a TV e sua posição sentado entram no save versão 6. Saves das versões 1 a 5 continuam carregando; o caminho de dados foi mantido para preservar partidas anteriores à mudança de nome.
+As duas expansões, as melhorias de estoque, os cinco caixas e seus pedidos, os atendentes e o jogador com suas sacolas, os seis produtos, a encomenda com sua quantidade original, a TV e sua posição sentado entram no save versão 7, junto com as melhorias de entrega e a programação de reposição. Saves das versões 1 a 6 continuam carregando; o caminho de dados foi mantido para preservar partidas anteriores à mudança de nome.
 
 ## Atacado, lucro, capacidade e cinco caixas
 
@@ -167,6 +181,7 @@ Os sons podem tocar simultaneamente e pausam com o jogo. Voltar ao menu ou carre
 | `src/main.cpp` | Argumentos e entrada do programa |
 | `src/app.cpp` | Janela, eventos, ciclo do jogo e ações dos menus |
 | `src/game.cpp` / `.hpp` | Economia, estoque, clientes, melhorias e consumo |
+| `src/supplier.cpp` | Pedidos, entrega e reposição automática |
 | `src/helper.cpp` / `.hpp` | Auxiliar, rotas, coleta e atendimento automático |
 | `src/interior.cpp` / `.hpp` | Depósito, sofá, TV animada e modelo do auxiliar |
 | `src/player.cpp` / `.hpp` | Posição, caminhada/corrida, colisão, visão e seleção de objetos |
@@ -183,6 +198,7 @@ Os sons podem tocar simultaneamente e pausam com o jogo. Voltar ao menu ou carre
 | `src/settings.hpp` | Configurações gráficas, volume e resoluções |
 | `src/audio.cpp` / `.hpp` | Síntese dos efeitos, mistura de sons e dispositivo SDL |
 | `tests/audio_tests.cpp` | Sinais de áudio e reprodução com dispositivo simulado |
+| `tests/supplier_tests.cpp` | Reposição, reservas, entrega instantânea e compatibilidade de saves |
 | `tests/tests.cpp` | Testes de regras e persistência, sem janela |
 
 ## Validação
