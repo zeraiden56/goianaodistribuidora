@@ -1,4 +1,5 @@
 #include "audio.hpp"
+#include <SDL_mixer.h>
 
 #include <algorithm>
 #include <cmath>
@@ -524,6 +525,14 @@ std::vector<float> synthesizeSound(
 
     switch (sound) {
 
+        case Sound::Startup:
+            // Original ascending handheld-style chime, with soft odd harmonics.
+            s.tone(0.0f, .16f, 523.25f, .24f, 523.25f, .25f);
+            s.tone(.13f, .17f, 783.99f, .22f, 783.99f, .25f);
+            s.tone(.29f, .65f, 1046.50f, .25f, 1046.50f, .3f);
+            s.tone(.29f, .65f, 1567.98f, .09f);
+            break;
+
         // =====================================================================
         // FOOTSTEP
         // =====================================================================
@@ -971,50 +980,17 @@ bool Audio::initialize()
         return false;
     }
 
-    SDL_AudioSpec wanted{};
-    SDL_AudioSpec obtained{};
-
-    wanted.freq =
-        DEFAULT_SAMPLE_RATE;
-
-    wanted.format =
-        AUDIO_F32SYS;
-
-    wanted.channels =
-        1;
-
-    wanted.samples =
-        512;
-
-    wanted.callback =
-        &Audio::callback;
-
-    wanted.userdata =
-        this;
-
-    // Keep float + mono fixed because callback depends on them.
-    // Frequency may change to something supported by the device.
-    device =
-        SDL_OpenAudioDevice(
-            nullptr,
-            0,
-            &wanted,
-            &obtained,
-            SDL_AUDIO_ALLOW_FREQUENCY_CHANGE
-        );
-
-    if (!device)
+    // One stereo device mixes streamed music and the procedural effects.
+    if (Mix_OpenAudioDevice(DEFAULT_SAMPLE_RATE, AUDIO_F32SYS, 2, 1024,
+                            nullptr, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE) != 0)
         return false;
-
-    // Extra safety: callback assumes these exact properties.
-    if (
-        obtained.format != AUDIO_F32SYS ||
-        obtained.channels != 1 ||
-        obtained.freq < 8000
-    ) {
-        SDL_CloseAudioDevice(device);
-        device = 0;
-
+    device = true;
+    int sampleRate = 0, channels = 0;
+    Uint16 format = 0;
+    Mix_QuerySpec(&sampleRate, &format, &channels);
+    if (format != AUDIO_F32SYS || channels != 2 || sampleRate < 8000) {
+        Mix_CloseAudio();
+        device = false;
         return false;
     }
 
@@ -1030,7 +1006,7 @@ bool Audio::initialize()
         clips[i] =
             synthesizeSound(
                 static_cast<Sound>(i),
-                obtained.freq
+                sampleRate
             );
     }
 
@@ -1041,11 +1017,8 @@ bool Audio::initialize()
     stepDistance = 0.0f;
     walking = false;
 
-    // SDL audio devices start paused.
-    SDL_PauseAudioDevice(
-        device,
-        0
-    );
+    effectsPaused = false;
+    Mix_SetPostMix(&Audio::callback, this);
 
     return true;
 }
@@ -1059,9 +1032,8 @@ void Audio::shutdown()
     if (!device)
         return;
 
-    SDL_CloseAudioDevice(
-        device
-    );
+    Mix_SetPostMix(nullptr, nullptr);
+    Mix_CloseAudio();
 
     device = 0;
 
@@ -1098,19 +1070,9 @@ void Audio::callback(
             stream
         );
 
-    const int count =
-        bytes /
-        static_cast<int>(
-            sizeof(float)
-        );
-
-    std::memset(
-        stream,
-        0,
-        static_cast<std::size_t>(
-            bytes
-        )
-    );
+    std::lock_guard<std::mutex> lock(audio.mixMutex);
+    if (audio.effectsPaused) return;
+    const int count = bytes / static_cast<int>(sizeof(float) * 2);
 
     // -------------------------------------------------------------------------
     // Mix active voices
@@ -1177,9 +1139,9 @@ void Audio::callback(
                 ) *
                 fraction;
 
-            out[i] +=
-                sample *
-                voice.gain;
+            const float effect = sample * voice.gain * audio.volume;
+            out[i*2] += effect;
+            out[i*2+1] += effect;
 
             voice.cursor +=
                 voice.rate;
@@ -1187,18 +1149,11 @@ void Audio::callback(
     }
 
     // -------------------------------------------------------------------------
-    // Master volume + soft limiter
+    // Limit the combined stereo stream without changing music volume.
     // -------------------------------------------------------------------------
+    for (int i = 0; i < count*2; ++i)
+        out[i] = softLimit(out[i]);
 
-    for (int i = 0; i < count; ++i) {
-
-        const float mixed =
-            out[i] *
-            audio.volume;
-
-        out[i] =
-            softLimit(mixed);
-    }
 }
 
 // =============================================================================
@@ -1249,9 +1204,7 @@ void Audio::play(
     if (gain <= 0.0f)
         return;
 
-    SDL_LockAudioDevice(
-        device
-    );
+    std::lock_guard<std::mutex> lock(mixMutex);
 
     // -------------------------------------------------------------------------
     // Prefer an unused voice.
@@ -1320,9 +1273,7 @@ void Audio::play(
         };
     }
 
-    SDL_UnlockAudioDevice(
-        device
-    );
+
 }
 
 // =============================================================================
@@ -1428,13 +1379,11 @@ void Audio::setVolume(int percent)
         ) /
         100.0f;
 
-    if (device)
-        SDL_LockAudioDevice(device);
+    std::lock_guard<std::mutex> lock(mixMutex);
 
     volume = newVolume;
 
-    if (device)
-        SDL_UnlockAudioDevice(device);
+
 }
 
 // =============================================================================
@@ -1446,10 +1395,8 @@ void Audio::pause(bool paused)
     if (!device)
         return;
 
-    SDL_PauseAudioDevice(
-        device,
-        paused ? 1 : 0
-    );
+    std::lock_guard<std::mutex> lock(mixMutex);
+    effectsPaused = paused;
 }
 
 // =============================================================================
@@ -1458,8 +1405,7 @@ void Audio::pause(bool paused)
 
 void Audio::clear()
 {
-    if (device)
-        SDL_LockAudioDevice(device);
+    std::lock_guard<std::mutex> lock(mixMutex);
 
     for (auto& voice : voices)
         voice = {};
@@ -1467,6 +1413,5 @@ void Audio::clear()
     stepDistance = 0.0f;
     walking = false;
 
-    if (device)
-        SDL_UnlockAudioDevice(device);
+
 }

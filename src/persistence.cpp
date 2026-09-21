@@ -14,7 +14,8 @@
 namespace {
 bool between(float v,float low,float high) {return std::isfinite(v)&&v>=low&&v<=high;}
 bool validSettings(const Settings& s) {
-    return s.resolution>=0&&s.resolution<4&&s.quality>=0&&s.quality<3&&s.fov>=60&&s.fov<=100&&s.volume>=0&&s.volume<=100;
+    return s.resolution>=0&&s.resolution<resolutionCount&&s.quality>=0&&s.quality<3&&s.fov>=60&&s.fov<=100&&s.volume>=0&&s.volume<=100&&validFrameLimit(s.frameLimit)&&s.musicVolume>=0&&s.musicVolume<=100
+        &&s.controllerIcons>=0&&s.controllerIcons<=3&&s.controllerSensitivity>=50&&s.controllerSensitivity<=200&&s.controllerDeadzone>=5&&s.controllerDeadzone<=30;
 }
 // Replace only after the complete temporary file has been flushed and closed.
 bool atomicWrite(const std::filesystem::path& file,const std::string& data,std::string& error) {
@@ -206,14 +207,18 @@ bool loadGame(const std::filesystem::path& file,Game& g,Player& p,std::string& e
 }
 bool saveSettings(const std::filesystem::path& file,const Settings& s,std::string& error) {
     if(!validSettings(s)) {error="CONFIGURACAO INVALIDA.";return false;}
-    std::ostringstream out;out<<"DISTRIBUIDORA_OPTIONS 2\n"<<s.fullscreen<<' '<<s.vsync<<' '
-        <<s.resolution<<' '<<s.quality<<' '<<s.fov<<' '<<s.volume<<'\n';return atomicWrite(file,out.str(),error);
+    std::ostringstream out;out<<"DISTRIBUIDORA_OPTIONS 5\n"<<s.fullscreen<<' '<<s.vsync<<' '
+        <<s.resolution<<' '<<s.quality<<' '<<s.fov<<' '<<s.volume<<' '<<s.frameLimit<<' '<<s.musicVolume<<' '
+        <<s.controllerIcons<<' '<<s.controllerSensitivity<<' '<<s.controllerDeadzone<<' '<<s.controllerInvertY<<'\n';return atomicWrite(file,out.str(),error);
 }
 bool loadSettings(const std::filesystem::path& file,Settings& settings) {
     std::ifstream in(file);Settings s;std::string magic;int version=0;
     if(!(in>>magic>>version>>s.fullscreen>>s.vsync>>s.resolution>>s.quality>>s.fov)
-        ||magic!="DISTRIBUIDORA_OPTIONS"||(version!=1&&version!=2)) return false;
-    if(version==2&&!(in>>s.volume))return false;
+        ||magic!="DISTRIBUIDORA_OPTIONS"||(version<1||version>5)) return false;
+    if(version>=2&&!(in>>s.volume))return false;
+    if(version>=3&&!(in>>s.frameLimit))return false;
+    if(version>=4&&!(in>>s.musicVolume))return false;
+    if(version>=5&&!(in>>s.controllerIcons>>s.controllerSensitivity>>s.controllerDeadzone>>s.controllerInvertY))return false;
     if(!validSettings(s))return false;
     in>>std::ws;if(!in.eof()) return false;
     settings=s;return true;

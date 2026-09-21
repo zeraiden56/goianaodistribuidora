@@ -11,6 +11,9 @@ file(MAKE_DIRECTORY "${DEST}")
 file(COPY "${APP}" DESTINATION "${DEST}")
 get_filename_component(APP_DIR "${APP}" DIRECTORY)
 file(COPY "${APP_DIR}/images" DESTINATION "${DEST}")
+if(EXISTS "${APP_DIR}/musicas")
+    file(COPY "${APP_DIR}/musicas" DESTINATION "${DEST}")
+endif()
 file(GET_RUNTIME_DEPENDENCIES
     EXECUTABLES "${APP}"
     DIRECTORIES "${RUNTIME_DIR}"

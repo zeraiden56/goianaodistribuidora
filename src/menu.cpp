@@ -1,5 +1,6 @@
 #include "menu.hpp"
 #include "render.hpp"
+#include "controller_render.hpp"
 #include <GL/gl.h>
 #include <png.h>
 #include <array>
@@ -40,6 +41,11 @@ void image(GLuint texture,float x,float y,float w,float h,float alpha) {
 
 std::vector<std::string> menuRows(const Menu& m,const Settings& s,bool hasSave) {
     switch(m.screen) {
+    case Screen::Controls:return {
+        std::string("ICONES: ")+(s.controllerIcons==0?"AUTOMATICO":s.controllerIcons==1?"XBOX":s.controllerIcons==2?"PLAYSTATION / PS4":"NINTENDO"),
+        "SENSIBILIDADE: "+std::to_string(s.controllerSensitivity)+"%",
+        "ZONA MORTA: "+std::to_string(s.controllerDeadzone)+"%",
+        std::string("INVERTER CAMERA Y: ")+(s.controllerInvertY?"SIM":"NAO"),"VOLTAR"};
     case Screen::Main:return {hasSave?"CONTINUAR":"CONTINUAR - NENHUM SLOT","NOVO JOGO","OPCOES","SAIR PARA O DESKTOP"};
     case Screen::Pause:return {"RETOMAR JOGO","SALVAR NO SLOT ATIVO","OPCOES","SALVAR E VOLTAR AO MENU","SALVAR E SAIR","RESETAR E GANHAR PERK AUTOMATICO"};
     case Screen::ConfirmNew:return {"VOLTAR","ESCOLHER SLOT NOVO"};
@@ -49,14 +55,17 @@ std::vector<std::string> menuRows(const Menu& m,const Settings& s,bool hasSave) 
     case Screen::Options:return {std::string("TELA CHEIA: ")+(s.fullscreen?"SIM":"NAO"),
         "JANELA: "+std::to_string(widths[s.resolution])+" X "+std::to_string(heights[s.resolution]),
         std::string("VISUAL: ")+(s.quality==0?"NATIVO":s.quality==1?"RETRO 1/2":"RETRO 1/3"),
-        std::string("VSYNC: ")+(s.vsync?"SIM":"NAO"),"CAMPO DE VISAO: "+std::to_string(s.fov),"VOLUME DOS EFEITOS: "+std::to_string(s.volume),"VOLTAR"};
+        std::string("VSYNC: ")+(s.vsync?"SIM":"NAO"),"CAMPO DE VISAO: "+std::to_string(s.fov),"VOLUME DOS EFEITOS: "+std::to_string(s.volume),
+        "LIMITE DE FPS: "+(s.frameLimit?std::to_string(s.frameLimit):std::string("ILIMITADO")),
+        "VOLUME DA MUSICA: "+std::to_string(s.musicVolume),"CONTROLES","VOLTAR"};
     default:return {};
     }
 }
 int menuHit(int x,int y,int count) {
     if(x<48||x>438||y<173)return -1;
-    int row=(y-173)/37;
-    return row<count&&(y-173)%37<32?row:-1;
+    const int spacing=menuRowSpacing(count);
+    int row=(y-173)/spacing;
+    return row<count&&(y-173)%spacing<spacing-5?row:-1;
 }
 void renderMenu(const Menu& m,const Settings& s,bool hasSave) {
     loadArt();
@@ -67,21 +76,30 @@ void renderMenu(const Menu& m,const Settings& s,bool hasSave) {
     image(logoTexture,84,35,318,106,1);
     if(!logoTexture)text(53,86,"GOIANAO DISTRIBUIDORA",2.7f,.95f,.75f,.36f);
     std::string title=m.screen==Screen::Main?"MENU PRINCIPAL":m.screen==Screen::Pause?"JOGO PAUSADO":m.screen==Screen::Options?"OPCOES DE VIDEO E AUDIO":m.screen==Screen::CompanyName?"NOME DA SUA DISTRIBUIDORA":m.screen==Screen::ConfirmPrestige?"RESET AUTOMATICO COM PERK":m.screen==Screen::SlotSelect?(m.selectingNew?"ESCOLHA O SLOT NOVO":"CARREGAR UM SLOT"):"ESCOLHER NOVO JOGO";
+    if(m.screen==Screen::Controls)title="CONFIGURACOES DO CONTROLE";
     text(48,150,title,1.1f);
     if(m.screen==Screen::CompanyName) {rect(48,263,390,34,.08f,.14f,.13f);text(60,275,m.input+"_",1.3f,1.f,.82f,.45f);}
     auto rows=menuRows(m,s,hasSave);
+    const int spacing=menuRowSpacing(static_cast<int>(rows.size()));
     for(int i=0;i<int(rows.size());++i) {
         bool selected=i==m.selected;
-        rect(48,173+i*37,390,32,selected?.21f:.075f,selected?.32f:.13f,selected?.29f:.14f);
-        text(61,185+i*37,rows[i],1.3f,selected?1.f:.82f,selected?.82f:.88f,selected?.45f:.83f);
+        rect(48,173+i*spacing,390,spacing-5,selected?.21f:.075f,selected?.32f:.13f,selected?.29f:.14f);
+        text(61,183+i*spacing,rows[i],1.3f,selected?1.f:.82f,selected?.82f:.88f,selected?.45f:.83f);
     }
     if(m.screen==Screen::SlotSelect)text(48,441,"TRES PROGRESSOS INDEPENDENTES",1.1f);
-    else if(m.screen==Screen::CompanyName)text(48,441,"ENTER CONFIRMA O NOME",1.1f);
+    else if(m.screen==Screen::CompanyName)text(48,441,controllerPrompts()?"USE O TECLADO VIRTUAL AO LADO":"ENTER CONFIRMA O NOME",1.1f);
     else if(m.screen==Screen::ConfirmPrestige)text(48,441,"O PERK E CONCEDIDO AUTOMATICAMENTE NO RESET",1.2f);
-    else if(m.screen==Screen::Options)text(48,441,"TELA CHEIA USA A RESOLUCAO DO MONITOR",1.1f);
+    else if(m.screen==Screen::Options) {
+        text(48,435,"TELA CHEIA USA A RESOLUCAO DO MONITOR",1.1f);
+        text(48,450,"VSYNC LIGADO LIMITA FPS AO MONITOR",1.1f);
+    }
     else if(m.screen==Screen::Pause)text(48,441,"TEMPO PAUSADO - SAIDA SALVA AUTOMATICAMENTE",1.1f);
     else if(m.screen==Screen::Main)text(48,441,"SUA DISTRIBUIDORA. SEU RITMO.",1.1f);
-    text(48,480,"MOUSE OU SETAS / ENTER / ESC VOLTAR",1.15f);
+    if(controllerPrompts()) {
+        padHint(48,480,PadIcon::Dpad,"NAVEGAR");
+        padHint(170,480,PadIcon::South,"CONFIRMAR");
+        padHint(316,480,PadIcon::East,"VOLTAR");
+    } else text(48,480,"MOUSE OU SETAS / ENTER / ESC VOLTAR",1.15f);
     if(!m.notice.empty()) {rect(0,512,960,28,.04f,.08f,.08f);text(14,520,m.notice,1.4f,.96f,.72f,.34f);}
 }
 

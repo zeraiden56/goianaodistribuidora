@@ -74,6 +74,27 @@ void persistenceTests(const std::filesystem::path& directory) {
     check(loadSettings(directory/"options.cfg",restored)&&restored.volume==70&&restored.resolution==2,"legacy options keep graphics and default volume");
     std::ofstream(directory/"options.cfg")<<"DISTRIBUIDORA_OPTIONS 2\n0 1 2 1 80 101\n";
     check(!loadSettings(directory/"options.cfg",restored)&&restored.volume==70,"invalid volume does not mutate settings");
+    for(int limit:frameLimits)for(int resolution=0;resolution<resolutionCount;++resolution) {
+        settings.frameLimit=limit;settings.resolution=resolution;
+        check(saveSettings(directory/"options.cfg",settings,error),"save extended video options");
+        check(loadSettings(directory/"options.cfg",restored)&&restored.frameLimit==limit&&restored.resolution==resolution,"FPS and resolution round trip");
+    }
+    std::ofstream(directory/"options.cfg")<<"DISTRIBUIDORA_OPTIONS 2\n0 1 3 0 75 40\n";
+    check(loadSettings(directory/"options.cfg",restored)&&restored.frameLimit==0&&restored.volume==40,"v2 defaults to unlimited without losing volume");
+    for(const char* invalid:{"0 0 5 0 75 70 -1", "0 0 5 0 75 70 166", "0 0 6 0 75 70 165", "0 0 5 0 75 70", "0 0 5 0 75 70 165 extra"}) {
+        std::ofstream(directory/"options.cfg")<<"DISTRIBUIDORA_OPTIONS 3\n"<<invalid<<'\n';
+        check(!loadSettings(directory/"options.cfg",restored)&&restored.frameLimit==0&&restored.resolution==3,"malformed extended options leave settings intact");
+    }
+    for(int volume:{0,35,100}) {
+        settings.musicVolume=volume;
+        check(saveSettings(directory/"options.cfg",settings,error)&&loadSettings(directory/"options.cfg",restored)&&restored.musicVolume==volume,"music volume round trip");
+    }
+    std::ofstream(directory/"options.cfg")<<"DISTRIBUIDORA_OPTIONS 3\n0 0 5 0 75 70 165\n";
+    check(loadSettings(directory/"options.cfg",restored)&&restored.musicVolume==35&&restored.frameLimit==165,"legacy FPS settings default music volume");
+    for(const char* invalid:{"0 0 5 0 75 70 165 -1","0 0 5 0 75 70 165 101","0 0 5 0 75 70 165"}) {
+        std::ofstream(directory/"options.cfg")<<"DISTRIBUIDORA_OPTIONS 4\n"<<invalid<<'\n';
+        check(!loadSettings(directory/"options.cfg",restored)&&restored.musicVolume==35,"invalid music volume does not mutate settings");
+    }
     std::cout<<"Persistence tests passed\n";
 }
 void capacityAndConsumptionTests() {

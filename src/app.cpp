@@ -2,6 +2,11 @@
 
 #include "shop_layout.hpp"
 #include "audio.hpp"
+#include "music.hpp"
+#include "music_render.hpp"
+#include "controller.hpp"
+#include "controller_render.hpp"
+#include "startup.hpp"
 #include "computer.hpp"
 #include "world.hpp"
 #include "menu.hpp"
@@ -26,7 +31,7 @@ namespace {
 constexpr int kLogicalWidth = 960;
 constexpr int kLogicalHeight = 540;
 constexpr int kSaveSlots = 3;
-constexpr int kResolutionCount = 4;
+constexpr int kResolutionCount = resolutionCount;
 constexpr int kQualityCount = 3;
 
 constexpr float kAutosaveSeconds = 30.0f;
@@ -42,6 +47,10 @@ class Application {
     SDL_GLContext context = nullptr;
 
     Audio audio;
+    Music music;
+    Controller controller;
+    bool controllerHelp=false;
+    int nameKey=0;
     Game game;
     Player player;
     Settings settings;
@@ -70,6 +79,8 @@ class Application {
 public:
     ~Application()
     {
+        controller.shutdown();
+        music.shutdown();
         audio.shutdown();
 
         if (context) {
@@ -168,6 +179,7 @@ public:
             computerZoom = 0.0f;
 
         menu.open(screen);
+        controller.resetNavigation();
 
         // Reset footstep accumulation whenever gameplay control is interrupted.
         audio.moved(0.0f);
@@ -280,6 +292,11 @@ public:
         settings.resolution = std::clamp(settings.resolution, 0, kResolutionCount - 1);
         settings.quality = std::clamp(settings.quality, 0, kQualityCount - 1);
         settings.volume = std::clamp(settings.volume, 0, 100);
+        settings.musicVolume = std::clamp(settings.musicVolume, 0, 100);
+        settings.controllerIcons=std::clamp(settings.controllerIcons,0,3);
+        settings.controllerSensitivity=std::clamp(settings.controllerSensitivity,50,200);
+        settings.controllerDeadzone=std::clamp(settings.controllerDeadzone,5,30);
+        if (!validFrameLimit(settings.frameLimit)) settings.frameLimit = 0;
         settings.fov = std::clamp(settings.fov, 60, 100);
 
         // Keep FOV on the same 5-degree grid used by the options menu.
@@ -362,10 +379,31 @@ public:
             audio.setVolume(settings.volume);
             break;
 
+        case 6: {
+            int index = 0;
+            while (index < frameLimitCount - 1 && frameLimits[index] != settings.frameLimit) ++index;
+            settings.frameLimit = frameLimits[(index + direction + frameLimitCount) % frameLimitCount];
+            break;
+        }
+
+        case 7:
+            settings.musicVolume=std::clamp(settings.musicVolume+direction*5,0,100);
+            music.setVolume(settings.musicVolume);
+            break;
+
         default:
             return;
         }
 
+        persistOptions();
+    }
+
+    void controllerOption(int row,int direction)
+    {
+        if(row==0)settings.controllerIcons=(settings.controllerIcons+direction+4)%4;
+        if(row==1)settings.controllerSensitivity=std::clamp(settings.controllerSensitivity+direction*25,50,200);
+        if(row==2)settings.controllerDeadzone=std::clamp(settings.controllerDeadzone+direction*5,5,30);
+        if(row==3)settings.controllerInvertY=!settings.controllerInvertY;
         persistOptions();
     }
 
@@ -416,13 +454,19 @@ public:
             break;
 
         case Screen::Options:
-            if (row == 6) {
+            if(row==8)open(Screen::Controls);
+            else if (row == 9) {
                 if (persistOptions())
                     open(menu.back);
             }
             else {
                 option(row, 1);
             }
+            break;
+
+        case Screen::Controls:
+            if(row==4)open(Screen::Options);
+            else controllerOption(row,1);
             break;
 
         case Screen::ConfirmNew:
@@ -645,8 +689,69 @@ public:
         capture();
     }
 
+    PadContext padContext() const {
+        if(menu.screen==Screen::CompanyName)return PadContext::Name;
+        if(menu.screen!=Screen::Playing)return PadContext::Menu;
+        if(surveillance)return PadContext::Surveillance;
+        if(computer)return PadContext::Computer;
+        return PadContext::World;
+    }
+
+    void typeControllerName() {
+        const std::string letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        if(nameKey<36&&menu.input.size()<24)menu.input+=letters[nameKey];
+        if(nameKey==36&&menu.input.size()<24)menu.input+=' ';
+        if(nameKey==37&&!menu.input.empty())menu.input.pop_back();
+        if(nameKey==38)menu.input.clear();
+        if(nameKey==39)activate(0);
+    }
+
+    void controllerButton(SDL_GameControllerButton button) {
+        const auto context=padContext();
+        switch(controllerAction(button,context)) {
+        case PadAction::Pause:key(SDLK_ESCAPE);break;
+        case PadAction::Music:music.next();break;
+        case PadAction::Help:controllerHelp=!controllerHelp;break;
+        case PadAction::Confirm:
+            if(context==PadContext::Name)activate(0);
+            else if(context==PadContext::Surveillance)key(SDLK_e);
+            else if(context==PadContext::Computer)computerAction(desktop.selected);
+            else activate(menu.selected);
+            break;
+        case PadAction::Back:
+            if(context==PadContext::Computer||context==PadContext::Surveillance)key(SDLK_e);
+            else key(SDLK_ESCAPE);
+            break;
+        case PadAction::Interact:if(context==PadContext::Name)typeControllerName();else key(SDLK_e);break;
+        case PadAction::ReturnBag:key(SDLK_q);break;
+        case PadAction::Consume:key(SDLK_r);break;
+        case PadAction::Crate:key(SDLK_f);break;
+        case PadAction::TV:key(SDLK_t);break;
+        case PadAction::Computer:key(SDLK_c);break;
+        case PadAction::Erase:if(!menu.input.empty())menu.input.pop_back();break;
+        case PadAction::ClearName:menu.input.clear();break;
+        default:break;
+        }
+    }
+
+    void controllerUpdate(float dt) {
+        const bool trigger=controller.rightTriggerPressed();
+        const auto context=padContext();
+        if(context==PadContext::World) {
+            if(trigger)key(SDLK_e);
+            return;
+        }
+        const auto direction=controller.navigation(dt,settings.controllerDeadzone);
+        if(direction==SDLK_UNKNOWN)return;
+        if(context==PadContext::Name) {
+            const int change=direction==SDLK_UP?-10:direction==SDLK_DOWN?10:direction==SDLK_LEFT?-1:1;
+            nameKey=(nameKey+change+40)%40;
+        } else key(direction);
+    }
+
     void key(SDL_Keycode keycode)
     {
+        if(keycode==SDLK_F8) {music.next();return;}
         // ---------------------------------------------------------------------
         // Global shortcuts
         // ---------------------------------------------------------------------
@@ -659,7 +764,8 @@ public:
         }
 
         if (keycode == SDLK_ESCAPE) {
-            if (menu.screen == Screen::Playing) {
+            if(menu.screen==Screen::Controls)open(Screen::Options);
+            else if (menu.screen == Screen::Playing) {
                 computer = false;
                 surveillance = false;
                 computerZoom = 0.0f;
@@ -716,9 +822,12 @@ public:
                 activate(menu.selected);
             else if (menu.screen == Screen::Options &&
                      (keycode == SDLK_LEFT || keycode == SDLK_RIGHT) &&
-                     menu.selected < 6) {
+                     menu.selected < 8) {
                 option(menu.selected, keycode == SDLK_LEFT ? -1 : 1);
             }
+            else if(menu.screen==Screen::Controls&&menu.selected<4&&
+                    (keycode==SDLK_LEFT||keycode==SDLK_RIGHT))
+                controllerOption(menu.selected,keycode==SDLK_LEFT?-1:1);
 
             return;
         }
@@ -824,6 +933,29 @@ public:
         SDL_Event event{};
 
         while (SDL_PollEvent(&event)) {
+            const bool disconnected=event.type==SDL_CONTROLLERDEVICEREMOVED&&event.cdevice.which==controller.id();
+            const bool padEvent=controller.handle(event,settings.controllerDeadzone);
+            if(disconnected&&isPlaying()) {
+                open(Screen::Pause);menu.notice="CONTROLE DESCONECTADO. RECONECTE OU USE TECLADO.";
+            }
+            if(padEvent&&event.type==SDL_CONTROLLERBUTTONDOWN) {
+                controllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button));
+                continue;
+            }
+            if(event.type==SDL_KEYDOWN||event.type==SDL_MOUSEBUTTONDOWN||event.type==SDL_TEXTINPUT||
+               (event.type==SDL_MOUSEMOTION&&(event.motion.xrel||event.motion.yrel)))controller.keyboardUsed();
+            if(event.type==SDL_WINDOWEVENT) {
+                if(event.window.event==SDL_WINDOWEVENT_FOCUS_LOST)controller.setFocus(false);
+                if(event.window.event==SDL_WINDOWEVENT_FOCUS_GAINED)controller.setFocus(true);
+                if(event.window.event==SDL_WINDOWEVENT_FOCUS_LOST)music.suspend(true);
+                if(event.window.event==SDL_WINDOWEVENT_FOCUS_GAINED)music.suspend(false);
+            }
+            if(event.type==SDL_MOUSEBUTTONDOWN&&event.button.button==SDL_BUTTON_LEFT&&menu.screen!=Screen::Playing) {
+                int width,height;SDL_GetWindowSize(window,&width,&height);
+                if(musicNextHit(event.button.x*kLogicalWidth/std::max(width,1),event.button.y*kLogicalHeight/std::max(height,1))) {
+                    music.next();continue;
+                }
+            }
             if (event.type == SDL_QUIT) {
                 leave(true);
                 continue;
@@ -1026,18 +1158,23 @@ public:
 
         if (worldInputEnabled()) {
             const Uint8* keys = SDL_GetKeyboardState(nullptr);
+            const auto move=controller.stick(false,settings.controllerDeadzone);
+            const auto look=controller.stick(true,settings.controllerDeadzone);
+            const float sensitivity=settings.controllerSensitivity/100.f;
+            player.yaw=std::remainder(player.yaw+look.x*2.6f*sensitivity*dt,6.2831853f);
+            player.pitch=std::clamp(player.pitch+look.y*150.f*sensitivity*dt*(settings.controllerInvertY?-1.f:1.f),kMinPitch,kMaxPitch);
 
             const float forward =
                 static_cast<float>(keys[SDL_SCANCODE_W]) -
-                static_cast<float>(keys[SDL_SCANCODE_S]);
+                static_cast<float>(keys[SDL_SCANCODE_S])-move.y;
 
             const float strafe =
                 static_cast<float>(keys[SDL_SCANCODE_D]) -
-                static_cast<float>(keys[SDL_SCANCODE_A]);
+                static_cast<float>(keys[SDL_SCANCODE_A])+move.x;
 
             const bool sprint =
                 keys[SDL_SCANCODE_LSHIFT] ||
-                keys[SDL_SCANCODE_RSHIFT];
+                keys[SDL_SCANCODE_RSHIFT]||controller.held(SDL_CONTROLLER_BUTTON_LEFTSTICK);
 
             audio.moved(
                 movePlayer(
@@ -1094,9 +1231,20 @@ void smokeStep() {
 
 auto require=[&](bool ok){if(!ok)throw std::runtime_error("Menu smoke test failed at frame "+std::to_string(frame));};
 
+        // Early scripted interactions assume the previous camera transition
+        // has finished; frames 72 onward exercise its timing explicitly.
+        if(frame<72)computerZoom=computer?1.f:0.f;
+
         switch(frame) {
 
-        case 0:require(menu.screen==Screen::Main);break;
+        case 0:
+            require(menu.screen==Screen::Main);
+            if(music.active()&&music.count()>1) {
+                const int previous=music.index();key(SDLK_F8);
+                require(music.index()==(previous+1)%music.count());
+                testClick(850,476);require(music.index()==(previous+2)%music.count());
+            }
+            break;
 
         case 1:activate(1);if(menu.screen==Screen::SlotSelect)activate(0);if(menu.screen==Screen::ConfirmNew)activate(1);if(menu.screen==Screen::CompanyName)activate(0);require(active);break;
 
@@ -1110,7 +1258,17 @@ auto require=[&](bool ok){if(!ok)throw std::runtime_error("Menu smoke test faile
 
         case 6:menu.selected=2;key(SDLK_RIGHT);break;
 
-        case 7:menu.selected=4;key(SDLK_RIGHT);break;
+        case 7:
+            menu.selected=4;key(SDLK_RIGHT);
+            require(menuRows(menu,settings,hasSave).size()==9);
+            require(menuHit(80,173+6*28+10,9)==6&&menuHit(80,173+8*28+10,9)==8);
+            settings.frameLimit=0;menu.selected=6;key(SDLK_LEFT);require(settings.frameLimit==165);
+            key(SDLK_RIGHT);require(settings.frameLimit==0);
+            for(int i=0;i<frameLimitCount;++i)option(6,1);
+            require(settings.frameLimit==0);
+            settings.musicVolume=35;menu.selected=7;key(SDLK_RIGHT);
+            require(settings.musicVolume==40);key(SDLK_LEFT);require(settings.musicVolume==35);
+            break;
 
         case 8:key(SDLK_ESCAPE);require(menu.screen==Screen::Pause);break;
 
@@ -1312,7 +1470,8 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
 
         case 53:
 
-            key(SDLK_e);require(!computer&&player.seated);key(SDLK_c);require(computer&&player.seated);break;
+            key(SDLK_e);require(!computer&&player.seated);update(kComputerZoomSeconds);
+            key(SDLK_c);require(computer&&player.seated);break;
 
         case 54:
 
@@ -1334,7 +1493,7 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
 
         case 56:
 
-            key(SDLK_e);player.seated=false;
+            key(SDLK_e);update(kComputerZoomSeconds);player.seated=false;
 
             if(game.held>=0)game.returnHeld(false);
 
@@ -1587,6 +1746,7 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
         // own SDL audio subsystem and failure path.
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
             throw std::runtime_error(SDL_GetError());
+        controller.initialize();
 
         auto directory = requestedDirectory;
 
@@ -1687,6 +1847,14 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
 
         audio.setVolume(settings.volume);
 
+        if (!smoke && !showStudioIntro(window, audio, controller))
+            return 0;
+
+        char* musicBase=SDL_GetBasePath();
+        const auto musicDirectory=std::filesystem::u8path(musicBase?musicBase:"")/"musicas";
+        SDL_free(musicBase);
+        music.initialize(musicDirectory,settings.musicVolume);
+
         capture();
 
         Uint64 lastCounter = SDL_GetPerformanceCounter();
@@ -1707,6 +1875,8 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
             dt = std::clamp(dt, 0.0f, kMaxFrameDt);
 
             events();
+            music.update();
+            controllerUpdate(dt);
 
             if (smoke)
                 smokeStep();
@@ -1753,6 +1923,7 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
                 );
             }
 
+            setControllerPrompts(controller.inUse(),controller.icons(settings.controllerIcons));
             if (menu.screen == Screen::Playing) {
                 if (surveillance)
                     renderSurveillanceHUD(game, camera);
@@ -1762,12 +1933,15 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
                     renderHUD(
                         game,
                         player,
-                        SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_TAB]
+                        controller.inUse()?controllerHelp:SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_TAB]
                     );
             }
             else {
                 renderMenu(menu, settings, hasSave);
+                if(menu.screen==Screen::Controls)renderControllerPreview(controller.name());
+                if(menu.screen==Screen::CompanyName&&controller.inUse())renderControllerKeyboard(nameKey);
             }
+            renderMusicPlayer(music,menu.screen==Screen::Playing);
 
             if (smoke &&
                 (frame == 0 ||
@@ -1786,10 +1960,18 @@ int stock=game.products[0].stock;key(SDLK_b);key(SDLK_h);
             SDL_GL_SwapWindow(window);
             ++frame;
 
-            // A small cooperative delay prevents an uncapped menu/game from
-            // consuming a full CPU core when VSync is disabled.
-            if (!settings.vsync)
-                SDL_Delay(1);
+            // Include rendering and VSync time in the budget. Unlimited adds no delay.
+            if (!smoke && settings.frameLimit > 0) {
+                const double deadline = double(nowCounter) + double(frequency) / settings.frameLimit;
+                for (;;) {
+                    const double remaining = (deadline - double(SDL_GetPerformanceCounter())) / frequency;
+                    if (remaining <= 0) break;
+                    if (remaining > .002)
+                        SDL_Delay(static_cast<Uint32>(remaining * 1000) - 1);
+                    else
+                        SDL_Delay(0);
+                }
+            }
         }
 
         if (smoke) {

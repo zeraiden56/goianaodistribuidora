@@ -12,6 +12,7 @@
 
 // Original 5x7 bitmap alphabet keeps the prototype independent of font assets.
 const char* glyph(char c) {
+    if(c>='a'&&c<='z')c=static_cast<char>(c-'a'+'A');
     static const char* letters[]={"01110100011000111111100011000110001","11110100011000111110100011000111110","01111100001000010000100001000001111","11110100011000110001100011000111110","11111100001000011110100001000011111","11111100001000011110100001000010000","01111100001000010111100011000101111","10001100011000111111100011000110001","11111001000010000100001000010011111","00111000100001000010100101001001100","10001100101010011000101001001010001","10000100001000010000100001000011111","10001110111010110101100011000110001","10001110011010110011100011000110001","01110100011000110001100011000101110","11110100011000111110100001000010000","01110100011000110001101011001001101","11110100011000111110101001001010001","01111100001000001110000010000111110","11111001000010000100001000010000100","10001100011000110001100011000101110","10001100011000110001100010101000100","10001100011000110101101011101110001","10001100010101000100010101000110001","10001100010101000100001000010000100","11111000010001000100010001000011111"};
     static const char* digits[]={"01110100011001110101110011000101110","00100011000010000100001000010001110","01110100010000100010001000100011111","11110000010000101110000010000111110","00010001100101010010111110001000010","11111100001000011110000010000111110","01110100001000011110100011000101110","11111000010001000100010000100001000","01110100011000101110100011000101110","01110100011000101111000010000101110"};
     if(c>='A'&&c<='Z') return letters[c-'A'];
@@ -25,6 +26,11 @@ const char* glyph(char c) {
     if(c=='.') return "00000000000000000000000000010000100";
     if(c=='!') return "00100001000010000100001000000000100";
     if(c=='+') return "00000001000010011111001000010000000";
+    if(c=='?') return "01110100010000100010001000000000100";
+    if(c=='&') return "01100100101010001000101011001001101";
+    if(c=='(') return "00010001000100001000010000010000010";
+    if(c==')') return "01000001000001000010000100010001000";
+    if(c=='\'') return "00100001000000000000000000000000000";
     return "00000000000000000000000000000000000";
 }
 void rect(float x,float y,float w,float h,float r,float g,float b) {
@@ -32,10 +38,37 @@ void rect(float x,float y,float w,float h,float r,float g,float b) {
 }
 void text(float x,float y,const std::string& s,float scale,float r,float g,float b) {
     for(std::size_t at=0;at<s.size();++at) {
-        char c=s[at];bool tilde=false;
-        if(static_cast<unsigned char>(c)==0xC3&&at+1<s.size()
-            &&(static_cast<unsigned char>(s[at+1])==0x83||static_cast<unsigned char>(s[at+1])==0xA3)) {c='A';++at;tilde=true;}
-        if(tilde){rect(x+scale,y-2*scale,2*scale,scale,r,g,b);rect(x+3*scale,y-scale,scale,scale,r,g,b);}
+        char c=s[at];int accent=0;
+        if(static_cast<unsigned char>(c)==0xC3&&at+1<s.size()) {
+            unsigned char code=static_cast<unsigned char>(s[++at]);
+            if(code>=0xA0)code-=0x20; // The bitmap font uses uppercase forms.
+            if(code>=0x80&&code<=0x85)c='A';
+            else if(code==0x87){c='C';accent=6;}
+            else if(code>=0x88&&code<=0x8B)c='E';
+            else if(code>=0x8C&&code<=0x8F)c='I';
+            else if(code==0x91)c='N';
+            else if(code>=0x92&&code<=0x98)c='O';
+            else if(code>=0x99&&code<=0x9C)c='U';
+            else if(code==0x9D)c='Y';
+            else c='?';
+            if(code==0x83||code==0x95||code==0x91)accent=1;
+            if(code==0x81||code==0x89||code==0x8D||code==0x93||code==0x9A||code==0x9D)accent=2;
+            if(code==0x82||code==0x8A||code==0x8E||code==0x94||code==0x9B)accent=3;
+            if(code==0x80||code==0x88||code==0x8C||code==0x92||code==0x99)accent=4;
+            if(code==0x84||code==0x8B||code==0x8F||code==0x96||code==0x9C)accent=5;
+        } else if(static_cast<unsigned char>(c)>=0x80) {
+            // Normalize punctuation used by downloaded music filenames.
+            const auto start=at;
+            while(at+1<s.size()&&(static_cast<unsigned char>(s[at+1])&0xc0)==0x80)++at;
+            const auto symbol=s.substr(start,at-start+1);
+            c=symbol=="\xEF\xBC\x9F"?'?':symbol=="\xEF\xBC\x9A"?':':symbol=="\xE2\xA7\xB8"?'/':'-';
+        }
+        if(accent==1){rect(x+scale,y-2*scale,2*scale,scale,r,g,b);rect(x+3*scale,y-scale,scale,scale,r,g,b);}
+        if(accent==2){rect(x+3*scale,y-3*scale,scale,scale,r,g,b);rect(x+2*scale,y-2*scale,scale,scale,r,g,b);}
+        if(accent==3){rect(x+2*scale,y-3*scale,scale,scale,r,g,b);rect(x+scale,y-2*scale,scale,scale,r,g,b);rect(x+3*scale,y-2*scale,scale,scale,r,g,b);}
+        if(accent==4){rect(x+scale,y-3*scale,scale,scale,r,g,b);rect(x+2*scale,y-2*scale,scale,scale,r,g,b);}
+        if(accent==5){rect(x+scale,y-2*scale,scale,scale,r,g,b);rect(x+3*scale,y-2*scale,scale,scale,r,g,b);}
+        if(accent==6){rect(x+2*scale,y+7*scale,scale,scale,r,g,b);rect(x+scale,y+8*scale,scale,scale,r,g,b);}
         auto bits=glyph(c);for(int j=0;j<7;++j) for(int i=0;i<5;++i) if(bits[j*5+i]=='1') rect(x+i*scale,y+j*scale,scale,scale,r,g,b);x+=6*scale;}
 }
 void box(Box a) {

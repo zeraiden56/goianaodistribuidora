@@ -66,6 +66,46 @@ struct UiRect {
 
 std::array<Bubble, MAX_CHECKOUTS> bubbles{};
 
+// Closed, bevelled meshes give the low-poly silhouettes softer edges without
+// overlapping decorative shells or relying on transparent faces.
+void modelPart(Box part, float topWidth = 1.f, float bottomWidth = 1.f)
+{
+    const float hx = part.w * .5f, hy = part.h * .5f, hz = part.d * .5f;
+    const float bevel = std::min({hx, hy, hz}) * .22f;
+    const float levels[] = {-hy, -hy + bevel, hy - bevel, hy};
+    float points[4][8][3]{};
+    for (int ring = 0; ring < 4; ++ring) {
+        const float inset = (ring == 0 || ring == 3) ? bevel : 0;
+        const float blend = (levels[ring] + hy) / (2 * hy);
+        const float x = hx * (bottomWidth + (topWidth-bottomWidth)*blend) - inset, z = hz - inset;
+        const float corner = std::min(x, z) * .28f;
+        const float outline[8][2] = {{-x+corner,-z},{x-corner,-z},{x,-z+corner},{x,z-corner},
+                                     {x-corner,z},{-x+corner,z},{-x,z-corner},{-x,-z+corner}};
+        for (int i = 0; i < 8; ++i) {
+            points[ring][i][0] = part.x + outline[i][0];
+            points[ring][i][1] = part.y + levels[ring];
+            points[ring][i][2] = part.z + outline[i][1];
+        }
+    }
+    glBegin(GL_QUADS);
+    for (int ring = 0; ring < 3; ++ring) for (int i = 0; i < 8; ++i) {
+        const float shades[] = {.72f,.78f,.86f,.94f,1.f,.94f,.82f,.74f};
+        const float shade = shades[i] * (ring == 2 ? 1.06f : ring == 0 ? .88f : 1.f);
+        glColor3f(part.r*shade, part.g*shade, part.b*shade);
+        glVertex3fv(points[ring][i]); glVertex3fv(points[ring+1][i]);
+        glVertex3fv(points[ring+1][(i+1)%8]); glVertex3fv(points[ring][(i+1)%8]);
+    }
+    glEnd();
+    glColor3f(part.r, part.g, part.b);
+    glBegin(GL_POLYGON);
+    for (int i = 7; i >= 0; --i) glVertex3fv(points[3][i]);
+    glEnd();
+    glColor3f(part.r*.7f, part.g*.7f, part.b*.7f);
+    glBegin(GL_POLYGON);
+    for (int i = 0; i < 8; ++i) glVertex3fv(points[0][i]);
+    glEnd();
+}
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -282,6 +322,11 @@ void character(
     bool staff)
 {
     style = normalizeStyle(style);
+    walk = std::clamp(walk, 0.0f, 1.0f);
+    carry = std::clamp(carry, 0.0f, 1.0f);
+    reach = std::clamp(reach, 0.0f, 1.0f);
+    glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT);
+    glDisable(GL_TEXTURE_2D);
 
     const auto& look = customerLooks()[style];
 
@@ -321,46 +366,29 @@ void character(
         1.0f
     );
 
-    // Very subtle vertical bob while walking.
-    glTranslatef(
-        0.0f,
-        std::sin(phase * 2.0f) *
-            0.015f *
-            walk,
-        0.0f
-    );
-
     // =========================================================================
     // Torso
     // =========================================================================
 
-    box({
+    modelPart({
         0.0f, 1.23f, 0.0f,
         0.56f, 0.64f, 0.32f,
         shirt[0], shirt[1], shirt[2]
-    });
+    }, 1.06f, .90f);
 
-    // Waist.
-    cylinder(
-        0.0f,
-        0.94f,
-        0.0f,
-        0.27f,
-        0.17f,
-        pants[0],
-        pants[1],
-        pants[2]
-    );
+    // Hips overlap the torso and cover the leg pivots without a round waist
+    // protruding through the flat shirt.
+    modelPart({0, .94f, 0, .54f, .18f, .31f, pants[0], pants[1], pants[2]});
 
     // Belt.
-    box({
+    modelPart({
         0.0f, 0.97f, 0.17f,
         0.56f, 0.055f, 0.025f,
         0.12f, 0.09f, 0.06f
     });
 
     // Belt buckle.
-    box({
+    modelPart({
         0.0f, 0.97f, 0.19f,
         0.09f, 0.07f, 0.035f,
         0.70f, 0.66f, 0.47f
@@ -372,14 +400,14 @@ void character(
 
     if (staff) {
         // Apron.
-        box({
+        modelPart({
             0.0f, 1.12f, 0.18f,
             0.42f, 0.65f, 0.035f,
             0.77f, 0.67f, 0.43f
         });
 
         // Apron pocket.
-        box({
+        modelPart({
             0.0f, 1.22f, 0.203f,
             0.25f, 0.17f, 0.018f,
             0.40f, 0.34f, 0.23f
@@ -387,7 +415,7 @@ void character(
 
         // Apron straps.
         for (float x : {-0.16f, 0.16f}) {
-            box({
+            modelPart({
                 x, 1.48f, 0.176f,
                 0.035f, 0.18f, 0.03f,
                 0.77f, 0.67f, 0.43f
@@ -396,7 +424,7 @@ void character(
     }
     else {
         // Shirt pocket.
-        box({
+        modelPart({
             -0.16f, 1.34f, 0.168f,
             0.12f, 0.13f, 0.022f,
             shirt[0] * 0.8f,
@@ -410,7 +438,7 @@ void character(
             1.32f,
             1.47f
         }) {
-            box({
+            modelPart({
                 0.0f, y, 0.17f,
                 0.022f, 0.023f, 0.016f,
                 0.82f, 0.78f, 0.62f
@@ -434,67 +462,29 @@ void character(
 
         glPushMatrix();
 
-        // Hip joint.
-        glTranslatef(
-            side * 0.16f,
-            0.89f,
-            0.0f
-        );
-
-        glRotatef(
-            swing * 29.0f,
-            1.0f,
-            0.0f,
-            0.0f
-        );
-
-        // Upper leg.
-        box({
-            0.0f, -0.20f, 0.0f,
-            0.22f, 0.43f, 0.25f,
-            pants[0],
-            pants[1],
-            pants[2]
-        });
-
-        // Knee joint.
-        glTranslatef(
-            0.0f,
-            -0.40f,
-            0.0f
-        );
-
-        glRotatef(
-            std::max(0.0f, -swing) *
-                24.0f,
-            1.0f,
-            0.0f,
-            0.0f
-        );
-
-        // Lower leg.
-        box({
-            0.0f, -0.19f, 0.0f,
-            0.20f, 0.39f, 0.23f,
-            pants[0] * 0.9f,
-            pants[1] * 0.9f,
-            pants[2] * 0.9f
-        });
-
-        // Shoe.
-        box({
-            0.0f, -0.39f, 0.07f,
-            0.23f, 0.14f, 0.39f,
-            0.07f, 0.07f, 0.075f
-        });
-
-        // Sole.
-        box({
-            0.0f, -0.45f, 0.07f,
-            0.24f, 0.025f, 0.40f,
-            0.30f, 0.31f, 0.30f
-        });
-
+        // Two-bone leg pose: the supporting sole stays on the ground, while
+        // the returning foot lifts. Knees bend forward and shoes stay level.
+        const float cycle = phase + (side < 0 ? PI : 0);
+        const float footZ = std::sin(cycle) * .16f * walk;
+        const float lift = std::max(0.f, std::cos(cycle)) * .10f * walk;
+        constexpr float upper = .40f, lower = .39f;
+        const float down = .76f - lift;
+        const float distance = std::sqrt(down*down + footZ*footZ);
+        const float knee = std::acos(std::clamp((distance*distance-upper*upper-lower*lower) /
+                                               (2*upper*lower), -1.f, 1.f));
+        const float hip = std::atan2(-footZ, down) -
+                          std::atan2(lower*std::sin(knee), upper+lower*std::cos(knee));
+        glTranslatef(side * .16f, .89f, 0);
+        glRotatef(hip * RAD2DEG, 1, 0, 0);
+        modelPart({0, -.20f, 0, .225f, .43f, .25f, pants[0], pants[1], pants[2]});
+        glTranslatef(0, -upper, 0);
+        modelPart({0, 0, 0, .205f, .13f, .23f, pants[0]*.94f, pants[1]*.94f, pants[2]*.94f});
+        glRotatef(knee * RAD2DEG, 1, 0, 0);
+        modelPart({0, -.19f, 0, .195f, .41f, .22f, pants[0]*.9f, pants[1]*.9f, pants[2]*.9f});
+        glTranslatef(0, -lower, 0);
+        glRotatef(-(hip+knee) * RAD2DEG, 1, 0, 0);
+        modelPart({0, -.065f, .07f, .235f, .12f, .37f, .075f, .07f, .065f});
+        modelPart({0, -.12f, .07f, .24f, .02f, .38f, .32f, .30f, .27f});
         glPopMatrix();
 
         // ---------------------------------------------------------------------
@@ -505,15 +495,15 @@ void character(
 
         // Shoulder.
         glTranslatef(
-            side * 0.36f,
+            side * 0.34f,
             1.46f,
             0.0f
         );
 
         glRotatef(
-            -swing * 26.0f -
-            carry * 46.0f -
-            reach * 35.0f,
+            -swing * 22.0f * (1.0f - carry) -
+            carry * 27.0f -
+            reach * 24.0f * (1.0f - carry),
             1.0f,
             0.0f,
             0.0f
@@ -521,14 +511,14 @@ void character(
 
         glRotatef(
             side *
-            (carry * 12.0f + 4.0f),
+            (3.0f - carry * 11.0f),
             0.0f,
             0.0f,
             1.0f
         );
 
         // Sleeve / upper arm.
-        box({
+        modelPart({
             0.0f, -0.12f, 0.0f,
             0.20f, 0.27f, 0.23f,
             shirt[0],
@@ -537,7 +527,7 @@ void character(
         });
 
         // Elbow.
-        box({
+        modelPart({
             0.0f, -0.25f, 0.0f,
             0.16f, 0.15f, 0.18f,
             skin[0],
@@ -553,15 +543,15 @@ void character(
 
         glRotatef(
             -12.0f -
-            carry * 42.0f -
-            reach * 25.0f,
+            carry * 49.0f -
+            reach * 25.0f * (1.0f - carry),
             1.0f,
             0.0f,
             0.0f
         );
 
         // Forearm.
-        box({
+        modelPart({
             0.0f, -0.14f, 0.0f,
             0.145f, 0.29f, 0.17f,
             skin[0],
@@ -570,7 +560,7 @@ void character(
         });
 
         // Hand.
-        box({
+        modelPart({
             0.0f, -0.32f, 0.01f,
             0.155f, 0.14f, 0.19f,
             skin[0],
@@ -596,30 +586,13 @@ void character(
         skin[2]
     );
 
-    cylinder(
-        0.0f,
-        1.88f,
-        0.0f,
-        0.22f,
-        0.40f,
-        skin[0],
-        skin[1],
-        skin[2],
-        0.205f
-    );
+    // A flat facial plane keeps eyes, eyebrows and mouth above the skin.
+    modelPart({0, 1.88f, 0, .43f, .40f, .40f, skin[0], skin[1], skin[2]});
 
-    // Hair top.
-    cylinder(
-        0.0f,
-        2.085f,
-        -0.018f,
-        0.225f,
-        0.13f,
-        hair[0],
-        hair[1],
-        hair[2],
-        0.18f
-    );
+    // A matching cap covers the bevelled head without skin poking through
+    // the cylindrical hairline at its corners.
+    modelPart({0, 2.085f, -.01f, .45f, .13f, .43f, hair[0], hair[1], hair[2]});
+    modelPart({0, 1.99f, -.192f, .42f, .21f, .055f, hair[0], hair[1], hair[2]});
 
     // =========================================================================
     // Face
@@ -627,7 +600,7 @@ void character(
 
     for (float side : {-1.0f, 1.0f}) {
         // Ear.
-        box({
+        modelPart({
             side * 0.217f,
             1.87f,
             0.0f,
@@ -640,10 +613,10 @@ void character(
         });
 
         // Eye white.
-        box({
+        modelPart({
             side * 0.085f,
             1.925f,
-            0.198f,
+            0.210f,
             0.077f,
             0.049f,
             0.026f,
@@ -653,10 +626,10 @@ void character(
         });
 
         // Pupil.
-        box({
+        modelPart({
             side * 0.085f,
             1.921f,
-            0.217f,
+            0.227f,
             0.032f,
             0.041f,
             0.012f,
@@ -666,10 +639,10 @@ void character(
         });
 
         // Eyebrow.
-        box({
+        modelPart({
             side * 0.085f,
             1.978f,
-            0.195f,
+            0.211f,
             0.09f,
             0.021f,
             0.02f,
@@ -680,7 +653,7 @@ void character(
     }
 
     // Nose.
-    box({
+    modelPart({
         0.0f,
         1.855f,
         0.221f,
@@ -693,7 +666,7 @@ void character(
     });
 
     // Mouth.
-    box({
+    modelPart({
         0.0f,
         1.766f,
         0.201f,
@@ -715,7 +688,7 @@ void character(
         style == 7
     ) {
         // Back hair.
-        box({
+        modelPart({
             0.0f,
             1.83f,
             -0.19f,
@@ -728,13 +701,13 @@ void character(
         });
 
         for (float x : {-0.21f, 0.21f}) {
-            box({
+            modelPart({
                 x,
                 1.91f,
-                -0.05f,
+                -0.085f,
                 0.09f,
                 0.37f,
-                0.25f,
+                0.19f,
                 hair[0],
                 hair[1],
                 hair[2]
@@ -750,18 +723,9 @@ void character(
         style == 1 ||
         style == 3
     ) {
-        cylinder(
-            0.0f,
-            2.14f,
-            0.0f,
-            0.24f,
-            0.12f,
-            shirt[0],
-            shirt[1],
-            shirt[2]
-        );
+        modelPart({0, 2.14f, 0, .49f, .12f, .47f, shirt[0], shirt[1], shirt[2]});
 
-        box({
+        modelPart({
             0.0f,
             2.10f,
             0.23f,
@@ -784,7 +748,7 @@ void character(
     ) {
         for (float x : {-0.09f, 0.09f}) {
             // Frame.
-            box({
+            modelPart({
                 x,
                 1.93f,
                 0.23f,
@@ -797,7 +761,7 @@ void character(
             });
 
             // Lens.
-            box({
+            modelPart({
                 x,
                 1.936f,
                 0.246f,
@@ -811,7 +775,7 @@ void character(
         }
 
         // Nose bridge.
-        box({
+        modelPart({
             0.0f,
             1.945f,
             0.24f,
@@ -832,7 +796,7 @@ void character(
         style == 4 ||
         style == 6
     ) {
-        box({
+        modelPart({
             0.0f,
             1.727f,
             0.12f,
@@ -862,7 +826,7 @@ void character(
 
     // Ponytail.
     if (style == 7) {
-        box({
+        modelPart({
             0.22f,
             1.72f,
             -0.18f,
@@ -876,6 +840,7 @@ void character(
     }
 
     glPopMatrix();
+    glPopAttrib();
 }
 
 // =============================================================================
@@ -952,7 +917,7 @@ void renderCustomer(const Game& g)
                 style,
                 g.time * 8.0f + lane,
                 p.walk,
-                carrying ? 0.65f : 0.0f,
+                carrying ? 1.0f : 0.0f,
                 0.0f,
                 false
             );
@@ -962,6 +927,8 @@ void renderCustomer(const Game& g)
             // -----------------------------------------------------------------
 
             if (carrying) {
+                const auto& look = customerLooks()[style];
+                glScalef(look.width, look.height, 1.0f);
                 texturedBox(
                     {
                         0.0f,

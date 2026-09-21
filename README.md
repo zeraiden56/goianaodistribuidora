@@ -4,7 +4,7 @@ Jogo em C++17, SDL2 e OpenGL: gerencie uma distribuidora brasileira em primeira 
 
 ## Compilar e executar no Linux
 
-Requer compilador com suporte a C++17, CMake 3.16 ou superior, pkg-config e bibliotecas de desenvolvimento SDL2, OpenGL e libpng.
+Requer compilador com suporte a C++17, CMake 3.16 ou superior, pkg-config e bibliotecas de desenvolvimento SDL2, SDL2_mixer (com suporte a MP3), OpenGL e libpng.
 
 Para obter o código:
 
@@ -38,11 +38,13 @@ O menu inicial permite **Continuar**, **Novo jogo**, **Opções** ou **Sair para
 As opções são aplicadas imediatamente e guardadas em arquivo:
 
 - Tela cheia sem bordas na resolução do monitor; **F11** também alterna esse modo.
-- Resolução em janela: 960×540, 1280×720, 1600×900 ou 1920×1080. Em tela cheia, essa escolha é usada ao voltar para janela.
+- Resolução em janela: 960×540, 1280×720, 1600×900, 1920×1080, 2560×1440 ou 3840×2160 (4K). Em tela cheia, essa escolha é usada ao voltar para janela.
 - Visual nativo, retrô em metade ou em um terço da resolução. O cenário fica pixelado e a interface mantém a legibilidade.
 - VSync, quando suportado pelo driver.
+- Limite de FPS: 30, 60, 75, 90, 120, 144, 165 ou ilimitado. Para remover todos os limites do jogo, selecione ilimitado e desligue o VSync; com VSync ligado, a taxa do monitor também limita os quadros. Configurações antigas mantêm o VSync e começam sem limite adicional de FPS.
 - Campo de visão entre 60 e 100 graus.
 - Volume dos efeitos de 0 (mudo) a 100. Configurações antigas continuam válidas e começam com volume 70.
+- Volume da música separado, de 0 a 100, começando em 35.
 
 Nas opções, clique/Enter alterna os valores; setas esquerda/direita ajustam a opção selecionada. Se o driver recusar tela cheia ou VSync, uma mensagem informa a falha.
 
@@ -165,9 +167,17 @@ No computador, pressione **C** para acessar o sistema de vigilância:
 
 As imagens são renderizadas ao vivo, mostrando estoque, cliente, gerente e veículos conforme o ponto de vista. Enquanto as câmeras estiverem abertas, você fica parado no computador, mas os clientes continuam esperando e as encomendas continuam chegando. As teclas **1–6**, nos monitores, só mudam a câmera; não compram mercadorias. Ao carregar uma partida, você volta à visão em primeira pessoa na posição salva.
 
+## Música de fundo
+
+A playlist começa no menu principal e continua durante a partida, a pausa e a volta ao menu. **F8** passa para a próxima faixa em qualquer tela; nos menus, também é possível clicar em **Próxima música** no painel **Tocando agora**. O nome aparece nos menus e no rodapé do jogo, com rolagem para títulos longos.
+
+As faixas de `src/musicas` são ordenadas pelo número no início do nome (2 vem antes de 10), avançam automaticamente e repetem a lista ao terminar. Arquivos inválidos são ignorados. Ajuste o volume separado em **Opções → Volume da música**; zero silencia a playlist. Ao perder o foco da janela, a música pausa e retoma quando você volta.
+
+O build copia a pasta para `musicas/` ao lado do executável, e o pacote Windows também a inclui. Mantenha essa pasta junto do `.exe`. Você pode adicionar MP3s ali antes de iniciar o jogo; os nomes dos arquivos, sem a numeração e a extensão, são usados como títulos. A faixa atual é reproduzida por streaming, sem carregar a playlist inteira na memória.
+
 ## Efeitos sonoros
 
-Os efeitos são sintetizados em C++ e reproduzidos com SDL2, sem arquivos externos ou dependências adicionais. Há sons de:
+Os efeitos são sintetizados em C++ e misturados à música em um único dispositivo estéreo com SDL2_mixer. Os efeitos não precisam de arquivos externos. Há sons de:
 
 - Passos suaves no piso, com volume reduzido, menos ruído agudo e cadência baseada na distância percorrida. A cadência aumenta naturalmente ao correr. Ficar parado ou andar contra uma parede não produz passos.
 - Abrir a bebida e beber, sincronizado ao uso de **R**.
@@ -226,4 +236,4 @@ Esse modo exige suporte a OpenGL offscreen. O comportamento de tela cheia e VSyn
 
 ## Escopo atual
 
-Protótipo em desenvolvimento, atualmente validado no Linux. Ainda sem música, gravações realistas de áudio, assets finais ou NPCs com animações detalhadas. Há duas expansões físicas compráveis, seis produtos, melhorias de estoque, até cinco caixas com clientes independentes e cinco atendentes. Jogador e atendentes usam sacolas de até cinco unidades. O jogador também pode atender manualmente. As encomendas chegam automaticamente, com lotes maiores e descontos após a expansão.
+Protótipo em desenvolvimento. Ainda sem gravações realistas de efeitos, assets finais ou NPCs com animações detalhadas. Há duas expansões físicas compráveis, seis produtos, melhorias de estoque, até cinco caixas com clientes independentes e cinco atendentes. Jogador e atendentes usam sacolas de até cinco unidades. O jogador também pode atender manualmente. As encomendas chegam automaticamente, com lotes maiores e descontos após a expansão.

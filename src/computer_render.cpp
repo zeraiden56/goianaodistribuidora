@@ -1,5 +1,6 @@
 #include "computer.hpp"
 #include "render.hpp"
+#include "controller_render.hpp"
 #include "world.hpp"
 #include <cmath>
 namespace {
@@ -56,7 +57,10 @@ void renderComputer(const Game& g,const ComputerUI& ui) {
     std::string notice=computerUnavailable(g,buttons[ui.selected].action);
     if(notice.empty())notice=ui.selected>=16&&ui.selected<=18?g.restockStatus:g.message;
     black(100,402,notice.substr(0,84),1.3f);
-    black(575,468,"TAB / ENTER",1.f);black(575,482,"E FECHAR",1.f);
+    if(controllerPrompts()) {
+        padHint(575,465,PadIcon::Dpad,"SELECIONAR");padHint(750,465,PadIcon::South,"CONFIRMAR");
+        padHint(575,487,PadIcon::East,"FECHAR");
+    } else {black(575,468,"TAB / ENTER",1.f);black(575,482,"E FECHAR",1.f);}
     bevel(0,509,960,31);bevel(8,513,180,23);black(18,521,"GOIANÃO 98",1.3f);
     black(803,521,worldClock(g.time),1.4f);
 }

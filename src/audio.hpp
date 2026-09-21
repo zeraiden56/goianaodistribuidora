@@ -4,13 +4,15 @@
 #include <cstddef>
 #include <random>
 #include <vector>
+#include <mutex>
 
-enum class Sound {Step,Drink,Smoke,Cash,Card,Computer,Pickup,Delivery,Count};
+enum class Sound {Step,Drink,Smoke,Cash,Card,Computer,Pickup,Delivery,Startup,Count};
 // Generated PCM assets are immutable while the SDL callback is running.
 std::vector<float> synthesizeSound(Sound sound,int sampleRate=48000);
 class Audio {
     struct Voice {const std::vector<float>* clip=nullptr;double cursor=0;float rate=1,gain=1;};
-    SDL_AudioDeviceID device=0;
+    bool device=false,effectsPaused=false;
+    std::mutex mixMutex;
     std::array<std::vector<float>,static_cast<std::size_t>(Sound::Count)> clips;
     std::array<Voice,24> voices{};
     std::mt19937 random{8192};
@@ -24,7 +26,7 @@ public:
     ~Audio(){shutdown();}
     bool initialize();
     void shutdown();
-    bool available() const {return device!=0;}
+    bool available() const {return device;}
     void play(Sound sound,float gain=1,float rate=1);
     bool payment(); // Cosmetic choice, independent of the saved customer RNG.
     void moved(float distance);

@@ -4,7 +4,7 @@
 #include <array>
 #include <vector>
 
-enum class Screen {Main,Playing,Pause,Options,ConfirmNew,CompanyName,ConfirmPrestige,SlotSelect};
+enum class Screen {Main,Playing,Pause,Options,ConfirmNew,CompanyName,ConfirmPrestige,SlotSelect,Controls};
 struct Menu {
     Screen screen=Screen::Main,back=Screen::Main;
     int selected=0;
@@ -16,5 +16,6 @@ struct Menu {
 };
 std::vector<std::string> menuRows(const Menu& menu,const Settings& settings,bool hasSave);
 int menuHit(int x,int y,int count);
+inline int menuRowSpacing(int count){return count>=10?25:count>8?28:count>7?32:37;}
 void renderMenu(const Menu& menu,const Settings& settings,bool hasSave);
 void destroyMenuArt();

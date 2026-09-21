@@ -1400,12 +1400,8 @@ void renderHelper(const Game& g)
             helper.held <
                 g.availableProducts()
         ) {
-
-            glTranslatef(
-                0.0f,
-                0.0f,
-                reach * 0.16f
-            );
+            const auto& look = customerLooks()[looks[static_cast<std::size_t>(lane)]];
+            glScalef(look.width, look.height, 1.0f);
 
             if (helper.packed) {
 
