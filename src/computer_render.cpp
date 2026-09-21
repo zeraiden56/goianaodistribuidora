@@ -1,5 +1,6 @@
 #include "computer.hpp"
 #include "render.hpp"
+#include "world.hpp"
 #include <cmath>
 namespace {
 void bevel(float x,float y,float w,float h,bool sunken=false) {
@@ -36,7 +37,7 @@ void renderComputer(const Game& g,const ComputerUI& ui) {
             text(436,b.y+10,"R$ "+std::to_string(g.orderCost(product)),1.25f,ink,ink,ink);
         } else {
             int workers=g.staffCount();
-            std::string label=i==4?"CAMERAS AO VIVO":i==5?"NIVEL - R$ "+std::to_string(g.level*200):
+            std::string label=i==4?"VIGILANCIA - 6 CAMERAS":i==5?"NIVEL - R$ "+std::to_string(g.level*200):
                 i==6?(g.largeStore?"LOJA NO TAMANHO MAXIMO":"AMPLIAR "+std::to_string(g.expanded?2:1)+" - R$ "+std::to_string(g.expansionPrice())):
                 i==7?(workers==5?"5 ATENDENTES CONTRATADOS":"ATENDENTE "+std::to_string(workers+1)+" - R$ 350"):
                 i==8?"FECHAR":i==9?"LOTE "+std::to_string(g.orderSize)+" UN. - DESCONTO "+std::to_string(g.lotDiscount())+"% - CLIQUE PARA TROCAR":
@@ -57,5 +58,5 @@ void renderComputer(const Game& g,const ComputerUI& ui) {
     black(100,402,notice.substr(0,84),1.3f);
     black(575,468,"TAB / ENTER",1.f);black(575,482,"E FECHAR",1.f);
     bevel(0,509,960,31);bevel(8,513,180,23);black(18,521,"GOIANÃO 98",1.3f);
-    black(803,521,"22:"+(int(g.time/3)<10?std::string("0"):std::string())+std::to_string(int(g.time/3)),1.4f);
+    black(803,521,worldClock(g.time),1.4f);
 }

@@ -1,5 +1,6 @@
 #include "persistence.hpp"
 #include <cmath>
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -35,14 +36,15 @@ bool atomicWrite(const std::filesystem::path& file,const std::string& data,std::
 }
 }
 bool validGame(const Game& g,const Player& p) {
-    if(g.deliveryLevel<0||g.deliveryLevel>3||(g.restockThreshold!=10&&g.restockThreshold!=25&&g.restockThreshold!=50)
+    if(g.companyName.empty()||g.companyName.size()>24||g.prestige<0||g.prestige>100000||g.perk<0||g.perk>g.prestige
+        ||g.deliveryLevel<0||g.deliveryLevel>3||(g.restockThreshold!=10&&g.restockThreshold!=25&&g.restockThreshold!=50)
         ||(g.restockReserve!=0&&g.restockReserve!=250&&g.restockReserve!=500&&g.restockReserve!=1000&&g.restockReserve!=2500)
         ||g.restockCursor<0||g.restockCursor>=Game::productCount||!between(g.restockTimer,0,1))return false;
     if(g.delivery>g.deliverySeconds()||(g.deliveryLevel==3&&g.pending!=-1))return false;
     if(g.customerStyle<0||g.customerStyle>=customerLookCount||g.cash<0||g.cash>2000000000||g.sold<0||g.sold>100000000||g.level<1||g.level>1000
         ||g.day<1||g.day>1000000||g.reputation<0||g.reputation>100
         ||g.wanted<0||g.wanted>=g.availableProducts()||g.quantity<1||g.quantity>(g.wholesale?60:5)||g.pending< -1||g.pending>=g.availableProducts()
-        ||g.held< -1||g.held>=g.availableProducts()||g.delivered<0||g.delivered>=g.quantity
+        ||g.held< -1||g.held>=g.availableProducts()||g.delivered<0||g.delivered>g.quantity
         ||(!g.customer&&g.delivered!=0)||g.consumed<0||g.consumed>100000000
         ||g.consuming< -1||g.consuming>=g.availableProducts()||g.consuming==3) return false;
     if(!between(g.delivery,0,12)||!between(g.patience,0,g.wholesale?180:65)||!between(g.arrival,0,4)
@@ -61,12 +63,24 @@ bool validGame(const Game& g,const Player& p) {
         ||(g.wholesale&&(!g.largeStore||g.quantity%Game::crateUnits!=0)))return false;
     for(int lane=1;lane<5;++lane) {
     const auto& c=lane==1?g.second:g.extraCheckout(lane);
-    if(c.wanted<0||c.wanted>=g.availableProducts()||c.quantity<1||c.quantity>(c.wholesale?60:5)||c.delivered<0||c.delivered>=c.quantity
+    if(c.wanted<0||c.wanted>=g.availableProducts()||c.quantity<1||c.quantity>(c.wholesale?60:5)||c.delivered<0||c.delivered>c.quantity
         ||(c.wholesale&&(!g.largeStore||c.quantity%Game::crateUnits!=0))
         ||c.customerStyle<0||c.customerStyle>=customerLookCount||(!c.customer&&c.delivered!=0)
         ||(lane>=g.checkoutCount()&&c.customer)||!between(c.patience,0,c.wholesale?180:65)||!between(c.arrival,0,4))return false;
     }
     for(int lane=0;lane<5;++lane) {
+        int first=lane==0?g.wanted:lane==1?g.second.wanted:g.extraCheckout(lane).wanted;
+        bool bulk=lane==0?g.wholesale:lane==1?g.second.wholesale:g.extraCheckout(lane).wholesale;
+        const auto& order=g.mixedOrders[lane];const auto& motion=g.customerMotion[lane];
+        if(!between(motion.approach,0,1)||!between(motion.departure,0,1)||motion.departingStyle<0||motion.departingStyle>=customerLookCount
+            ||(!g.customerActive(lane)&&motion.approach>0))return false;
+        int lines=0;
+        for(int i=0;i<Game::productCount;++i) {
+            int q=order.requested[i],d=order.delivered[i];
+            if(q<0||q>5||d<0||d>q||((bulk||i==first||i>=g.availableProducts()||!g.customerActive(lane))&&(q||d)))return false;
+            if(q)++lines;
+        }
+        if(lines>2||(g.customerActive(lane)&&g.orderDelivered(lane)>=g.orderTotal(lane)))return false;
         const auto& h=g.staff(lane);int task=int(h.task);
         if(h.hired&&(lane>=g.checkoutCount()||(lane>0&&!g.staff(lane-1).hired)))return false;
         if(h.packed&&(!g.largeStore||h.held<0))return false;
@@ -85,7 +99,7 @@ bool validGame(const Game& g,const Player& p) {
     return validPosition&&between(p.yaw,-1000000,1000000)&&between(p.pitch,-70,70);
 }
 void encodeGame(std::ostream& out,const Game& g,const Player& p) {
-    out<<std::setprecision(9)<<"DISTRIBUIDORA_SAVE 7\n";
+    out<<std::setprecision(9)<<"DISTRIBUIDORA_SAVE 9\n";
     out<<g.cash<<' '<<g.sold<<' '<<g.level<<' '<<g.day<<' '<<g.reputation<<'\n';
     for(int i=0;i<4;++i) out<<g.products[i].stock<<' ';
     out<<'\n'<<g.wanted<<' '<<g.quantity<<' '<<g.pending<<' '<<g.held<<' '<<g.delivered<<' '
@@ -115,10 +129,16 @@ void encodeGame(std::ostream& out,const Game& g,const Player& p) {
         out<<h.hired<<' '<<h.x<<' '<<h.z<<' '<<h.wait<<' '<<h.held<<' '<<h.target<<' '<<int(h.task)<<' '<<h.count<<'\n';
     }
     out<<g.deliveryLevel<<' '<<g.autoRestockEnabled<<' '<<g.restockThreshold<<' '<<g.restockReserve<<' '<<g.restockCursor<<' '<<g.restockTimer<<'\n';
+    out<<g.prestige<<' '<<g.perk<<' '<<std::quoted(g.companyName)<<'\n';
+    for(int lane=0;lane<5;++lane) {
+        for(int n:g.mixedOrders[lane].requested)out<<n<<' ';
+        for(int n:g.mixedOrders[lane].delivered)out<<n<<' ';
+        const auto& m=g.customerMotion[lane];out<<m.approach<<' '<<m.departure<<' '<<m.departingStyle<<' '<<m.purchased<<'\n';
+    }
 }
 bool decodeGame(std::istream& in,Game& game,Player& player) {
     Game g;Player p;std::string magic;int version=0;
-    if(!(in>>magic>>version)||magic!="DISTRIBUIDORA_SAVE"||(version<1||version>7)) return false;
+    if(!(in>>magic>>version)||magic!="DISTRIBUIDORA_SAVE"||(version<1||version>9)) return false;
     in>>g.cash>>g.sold>>g.level>>g.day>>g.reputation;
     for(int i=0;i<4;++i) in>>g.products[i].stock;
     in>>g.wanted>>g.quantity>>g.pending>>g.held>>g.delivered>>g.customer>>g.reinforced;
@@ -156,6 +176,14 @@ bool decodeGame(std::istream& in,Game& game,Player& player) {
         }
     }
     if(version>=7)in>>g.deliveryLevel>>g.autoRestockEnabled>>g.restockThreshold>>g.restockReserve>>g.restockCursor>>g.restockTimer;
+    if(version>=8)in>>g.prestige>>g.perk>>std::quoted(g.companyName);
+    if(version>=9) {
+        for(int lane=0;lane<5;++lane) {
+            for(int& n:g.mixedOrders[lane].requested)in>>n;
+            for(int& n:g.mixedOrders[lane].delivered)in>>n;
+            auto& m=g.customerMotion[lane];in>>m.approach>>m.departure>>m.departingStyle>>m.purchased;
+        }
+    } else g.bagCapacity=std::max(3,g.bagCapacity);
     g.restockStatus=g.autoRestockEnabled?"REPOSICAO AUTOMATICA ATIVA. VERIFICANDO ESTOQUE.":"REPOSICAO AUTOMATICA DESLIGADA.";
     g.refreshCapacity();
     // The sofa terminal occupies floor that existed in older saves.

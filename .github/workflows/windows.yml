@@ -26,6 +26,7 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-libpng
       - name: Compile
         run: |
           cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release

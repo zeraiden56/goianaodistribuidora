@@ -1,75 +1,53 @@
 #include "render.hpp"
-#include "customers.hpp"
 #include "shop_layout.hpp"
+#include "world.hpp"
 #include <algorithm>
 #include <cmath>
 namespace {
-void panel(float x,float y,float w,float h){rect(x,y,w,h,.035f,.075f,.079f);rect(x,y,3,h,.28f,.48f,.43f);}
-void bar(float x,float y,float w,float ratio,float r,float g,float b) {
-    rect(x,y,w,5,.13f,.19f,.19f);rect(x,y,w*std::clamp(ratio,0.f,1.f),5,r,g,b);
+void panel(float x,float y,float w,float h){rect(x,y,w,h,.035f,.075f,.079f);}
 }
-}
-void renderHUD(const Game& g,const Player& p,bool) {
-    rect(0,0,960,49,.025f,.055f,.058f);
-    text(18,12,"GOIANÃO DISTRIBUIDORA",2.f,.96f,.76f,.38f);
-    text(19,34,"LUCRO BASE +"+std::to_string(g.marginBonus())+"%",1.f,.62f,.77f,.73f);
-    text(340,10,"CAIXA",1.1f,.65f,.8f,.75f);text(340,26,"R$ "+std::to_string(g.cash)+",00",2);
-    text(591,12,"DIA "+std::to_string(g.day)+" / NIVEL "+std::to_string(g.level),1.55f);
-    text(591,34,"VENDIDOS: "+std::to_string(g.sold),1.f);
-    text(795,12,"REPUTACAO "+std::to_string(g.reputation),1.1f);bar(795,32,145,g.reputation/100.f,.43f,.75f,.52f);
-    panel(18,66,230,198);text(30,78,"ESTOQUE",1.4f,.7f,.87f,.82f);
-    for(int i=0;i<Game::productCount;++i) {
-        float y=102+i*26;
-        text(30,y,g.products[i].name,1.1f);text(171,y,i<g.availableProducts()?g.stockLabel(i):"TRAVADO",1.05f);
-        bool low=g.products[i].stock<4;
-        bar(30,y+13,205,float(g.products[i].stock)/g.products[i].capacity,low?.94f:.35f,low?.48f:.66f,.36f);
-    }
-    for(int lane=0;lane<g.checkoutCount();++lane) {
-        bool active=lane>=2?g.extraCheckout(lane).customer:lane?g.second.customer:g.customer;
-        float y=66+lane*65.f;
-        panel(646,y,296,61);text(658,y+10,"CAIXA "+std::to_string(lane+1),1.2f,.74f,.87f,.8f);
-        if(!active){text(658,y+32,"AGUARDANDO CLIENTE",1.3f);continue;}
-        int wanted=lane>=2?g.extraCheckout(lane).wanted:lane?g.second.wanted:g.wanted;
-        int quantity=lane>=2?g.extraCheckout(lane).quantity:lane?g.second.quantity:g.quantity;
-        int delivered=lane>=2?g.extraCheckout(lane).delivered:lane?g.second.delivered:g.delivered;
-        int style=lane>=2?g.extraCheckout(lane).customerStyle:lane?g.second.customerStyle:g.customerStyle;
-        float patience=lane>=2?g.extraCheckout(lane).patience:lane?g.second.patience:g.patience;
-        text(735,y+11,customerLooks()[style].name,1.f);
-        bool wholesale=lane>=2?g.extraCheckout(lane).wholesale:lane?g.second.wholesale:g.wholesale;
-        text(658,y+25,(wholesale?std::to_string(quantity/12)+" CX DE 12 - ":std::to_string(quantity)+" X ")+g.products[wanted].name,1.2f);
-        text(658,y+40,"ENTREGUES "+std::to_string(delivered)+"/"+std::to_string(quantity)+" - "+std::to_string(int(patience))+" S",1.2f);
-        bar(658,y+54,270,patience/(wholesale?180.f:65.f),patience<15?.95f:.4f,patience<15?.35f:.75f,.36f);
-    }
-    if(g.pending>=0){panel(18,274,230,28);text(30,285,"ENTREGA "+std::to_string(g.pendingUnits)+" UN. EM "+std::to_string(int(std::ceil(g.delivery)))+" S",1.1f);}
-    else if(g.autoRestockEnabled){panel(18,274,230,28);text(30,285,"AUTO LIGADO - LIMIAR "+std::to_string(g.restockThreshold)+"%",1.1f);}
-    if(g.intoxication>0){panel(18,310,230,31);text(30,318,"EMBRIAGUEZ "+std::to_string(int(g.intoxication)),1.1f);bar(30,331,205,g.intoxication/100,.76f,.5f,.3f);}
-    for(int lane=0;lane<g.checkoutCount();++lane) {
-        const auto& h=g.staff(lane);if(!h.hired)continue;
-        float y=342+lane*20.f;panel(18,y,230,20);
-        text(30,y+7,"ATENDENTE "+std::to_string(lane+1)+" - "+carriedLabel(h.count,h.packed),1.f);
-    }
+void renderHUD(const Game& g,const Player& p,bool help) {
+    panel(18,16,180,35);rect(18,16,3,35,.91f,.68f,.32f);
+    text(30,27,"R$ "+std::to_string(g.cash),1.9f,.97f,.81f,.46f);
+    panel(721,16,221,35);
+    text(733,29,"DIA "+std::to_string(g.day)+"  "+worldClock(g.time)+(daylightAt(g.time)>.35f?"  DIA":"  NOITE"),1.3f);
+    renderOrderBubbles(g,p);
     int target=interaction(p.x,p.z,p.yaw,g.expanded,g.secondCheckout,g.largeStore,g.thirdCheckout,g.annexCheckouts);
     rect(478,268,4,4,target>=0?.57f:.9f,target>=0?.88f:.9f,.71f);
     std::string hint;
-    if(target==16&&(p.seated||g.expanded))hint="E OU CLIQUE: ABRIR COMPUTADOR";
-    else if(p.seated)hint="E LEVANTAR / C COMPUTADOR / T TV";
-    else if(target==4)hint="E OU CLIQUE: ABRIR COMPUTADOR";
-    else if(stationCheckout(target)>=0)hint="E OU CLIQUE: ENTREGAR SACOLA NO CAIXA "+std::to_string(stationCheckout(target)+1);
-    else if(target==6)hint="E OU CLIQUE: SENTAR NO SOFA";
-    else if(target==7)hint="E OU CLIQUE: LIGAR OU DESLIGAR TV";
+    if(target==16&&(p.seated||g.expanded))hint="E / CLIQUE - COMPUTADOR";
+    else if(p.seated)hint="E LEVANTAR  /  C COMPUTADOR  /  T TV";
+    else if(target==4)hint="E / CLIQUE - COMPUTADOR";
+    else if(stationCheckout(target)>=0)hint="E / CLIQUE - ENTREGAR NO CAIXA "+std::to_string(stationCheckout(target)+1);
+    else if(target==6)hint="E / CLIQUE - SENTAR";
+    else if(target==7)hint="E / CLIQUE - LIGAR OU DESLIGAR TV";
     else {
         int product=stationProduct(target);
         if(product>=0) {
-            if(g.held==product)hint="E OU CLIQUE: DEVOLVER SACOLA";
-            else if(g.held>=0)hint="SACOLA OCUPADA - ENTREGUE OU DEVOLVA";
-            else if(g.products[product].stock==0)hint="SEM ESTOQUE - ENCOMENDE NO COMPUTADOR";
-            else hint=g.largeStore?"E/CLIQUE: UNIDADES  F/DIREITO: CX DE 12":"E OU CLIQUE: PEGAR "+std::string(g.products[product].name);
+            if(g.held>=0&&g.held!=product)hint="ENTREGUE A SACOLA OU DEVOLVA NA ORIGEM";
+            else if(g.held==product&&g.heldCount>=g.bagCapacity*(g.heldPacked?12:1))hint="SACOLA CHEIA  /  Q DEVOLVER";
+            else hint="E / CLIQUE - +1 "+std::string(g.products[product].name)+(g.held==product?"  /  Q DEVOLVER":"");
+            std::string stock="ESTOQUE "+g.stockLabel(product)+(g.largeStore?"  /  F - +1 CAIXA":"");
+            text(480-stock.size()*3.3f,468,stock,1.1f,.85f,.89f,.82f);
         }
     }
-    if(!hint.empty()){panel(252,448,456,15);text(260,452,hint,1.1f);}
-    panel(710,397,232,52);
-    text(722,405,g.held<0?"SACOLA VAZIA":g.products[g.held].name,1.25f);
-    text(722,425,carriedLabel(g.held<0?0:g.heldCount,g.heldPacked)+(g.held==1?" - R FUMAR":g.held>=0&&g.held!=3?" - R BEBER":""),1.1f);
-    panel(18,463,924,33);text(30,475,g.message.substr(0,108),1.25f,.97f,.79f,.46f);
-    rect(0,511,960,29,.025f,.055f,.058f);text(20,522,"WASD ANDAR  SHIFT CORRER  E/CLIQUE INTERAGIR  F/DIREITO CAIXAS  R CONSUMIR  ESC MENU",1.2f);
+    if(!hint.empty()) {
+        float width=hint.size()*7.2f+24;panel(480-width/2,484,width,28);
+        text(492-width/2,493,hint,1.2f,.96f,.84f,.57f);
+    }
+    if(g.held>=0) {
+        panel(720,414,222,42);text(731,423,g.products[g.held].name,1.2f,.96f,.8f,.43f);
+        text(731,440,carriedLabel(g.heldCount,g.heldPacked)+" / "+std::to_string(g.bagCapacity)+(g.heldPacked?" CX":" UN.")+(g.held!=3?"  R USAR":""),1.05f);
+    }
+    if(g.pending>=0){panel(18,63,180,24);text(29,71,"ENTREGA EM "+std::to_string(int(std::ceil(g.delivery)))+" S",1.2f);}
+    if(g.messageTime>0) {
+        std::string message=g.message.substr(0,110);
+        panel(218,60,message.size()*6.f+24,27);text(230,69,message,1.f,.96f,.8f,.48f);
+    }
+    text(20,523,"TAB CONTROLES",1.05f,.7f,.77f,.72f);
+    if(help) {
+        panel(18,321,340,187);text(32,334,"COMO ATENDER",1.6f,.95f,.77f,.4f);
+        const char* lines[]={"WASD ANDAR / SHIFT CORRER","E OU CLIQUE: PEGAR +1 / ENTREGAR","Q NA ORIGEM: DEVOLVER SACOLA","F OU DIREITO: PEGAR +1 CAIXA","R CONSUMIR / ESC PAUSAR","COMPLETE TODOS OS ITENS DO CLIENTE","ESTOQUE E MELHORIAS NO COMPUTADOR"};
+        for(int i=0;i<7;++i)text(32,361+i*19,lines[i],1.2f);
+    }
 }

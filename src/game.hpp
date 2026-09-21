@@ -11,6 +11,14 @@ struct Checkout {
     int wanted=0,quantity=1,delivered=0,customerStyle=1;
     float patience=65,arrival=4;
 };
+struct MixedOrder {
+    std::array<int,6> requested{},delivered{}; // Additional lines; the first line retains the legacy save fields.
+};
+struct CustomerMotion {
+    float approach=0,departure=0;
+    int departingStyle=0;
+    bool purchased=false;
+};
 struct Game {
     static constexpr int productCount=6;
     std::array<Product,productCount> products{{{"CERVEJA",4,8,18,48},{"CIGARRO",7,12,10,36},
@@ -28,7 +36,7 @@ struct Game {
     bool secondCheckout=false,thirdCheckout=false,largeStore=false;
     int storageLevel=0,heldCount=1;
     static constexpr int largeExpansionCost=1200,thirdCheckoutCost=750;
-    int bagCapacity=1,orderSize=12,pendingUnits=12;
+    int bagCapacity=3,orderSize=12,pendingUnits=12;
     int deliveryLevel=0,restockThreshold=25,restockReserve=0,restockCursor=0;
     bool autoRestockEnabled=false;
     float restockTimer=0;
@@ -36,6 +44,8 @@ struct Game {
     std::string restockStatus="REPOSICAO AUTOMATICA DESLIGADA.";
     static constexpr int checkoutCost=500;
     int cash=250,sold=0,level=1,day=1,reputation=100;
+    std::string companyName="GOIANAO DISTRIBUIDORA";
+    int prestige=0,perk=0;
     int wanted=0,quantity=2,pending=-1,held=-1,delivered=0;
     int consumed=0,consuming=-1,customerStyle=0;
     std::array<float,4> fridgeTime{}; // Transient door animation, no inventory state.
@@ -43,8 +53,21 @@ struct Game {
     float intoxication=0,consumeTime=0,smokeTime=0;
     bool customer=false;
     bool reinforced=false; // Legacy save field; secondCheckout controls the new upgrade.
-    std::string message="PEGUE OS PRODUTOS COM E E LEVE AO CAIXA A ESQUERDA.";
+    std::string message="CLIQUE PARA PEGAR +1. COMPLETE O PEDIDO SOBRE O CLIENTE. TAB MOSTRA OS CONTROLES.";
+    float messageTime=6;
+    std::string lastMessage=message;
     std::mt19937 random{42};
+    std::array<MixedOrder,5> mixedOrders{};
+    std::array<CustomerMotion,5> customerMotion{};
+    bool customerActive(int lane) const;
+    int requested(int lane,int product) const;
+    int fulfilled(int lane,int product) const;
+    int remaining(int lane,int product) const;
+    int nextProduct(int lane) const;
+    int orderTotal(int lane) const;
+    int orderDelivered(int lane) const;
+    void leaveCustomer(int lane,bool purchased=false);
+    bool returnHeld(bool frontStorage=true);
     bool order(int i,int units=0);
     int deliverySeconds() const {return deliveryLevel==0?12:deliveryLevel==1?6:deliveryLevel==2?3:0;}
     int deliveryUpgradeCost() const {return deliveryLevel==0?300:deliveryLevel==1?600:1200;}
@@ -86,6 +109,8 @@ struct Game {
     bool consume();
     void touchStorage(int product);
     bool upgradeLevel();
+    bool resetWithPerk();
+    int prestigeMarginBonus() const {return prestige*5;}
     void tick(float dt);
     int occupied(int i) const;
     std::string stockLabel(int i) const;

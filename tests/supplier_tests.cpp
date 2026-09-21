@@ -70,7 +70,7 @@ void migration() {
     Game controls;for(int amount:{250,500,1000,2500,0}){controls.cycleRestockReserve();check(controls.restockReserve==amount,"reserve cycles");}
     Game legacy;legacy.order(0);std::ostringstream data;encodeGame(data,legacy,Player{});std::istringstream records(data.str());
     std::vector<std::string> lines;std::string line;while(std::getline(records,line))lines.push_back(line);
-    std::ostringstream v6;v6<<"DISTRIBUIDORA_SAVE 6\n";for(std::size_t i=1;i+1<lines.size();++i)v6<<lines[i]<<'\n';
+    std::ostringstream v6;v6<<"DISTRIBUIDORA_SAVE 6\n";for(std::size_t i=1;i<23;++i)v6<<lines[i]<<'\n';
     std::istringstream input(v6.str());Player p;
     check(decodeGame(input,loaded,p)&&!loaded.autoRestockEnabled&&loaded.deliveryLevel==0&&loaded.pending==0&&loaded.delivery==12,"v6 migration retains delivery with automation off");
     Game bad=g;bad.restockThreshold=100;check(!validGame(bad,Player{}),"invalid threshold rejected");

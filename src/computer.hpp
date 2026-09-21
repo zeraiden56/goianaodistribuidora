@@ -1,5 +1,6 @@
 #pragma once
 #include "game.hpp"
+#include "player.hpp"
 #include <array>
 #include <string>
 enum class ComputerAction {Beer,Cigarettes,Spirits,Ice,Cameras,Level,Expansion,Helper,Close,Lot,Checkout,Bag,CanBeer,Soda,Storage,Speed,AutoRestock,RestockThreshold,RestockReserve,Delivery};
@@ -10,3 +11,7 @@ int computerProduct(ComputerAction action);
 int computerHit(int x,int y);
 std::string computerUnavailable(const Game& game,ComputerAction action);
 void renderComputer(const Game& game,const ComputerUI& ui);
+
+struct ComputerView {float x,y,z,yaw,pitch,fov;};
+ComputerView computerView(const Player& player,int terminal,float focus,float fov,float aspect);
+void renderTerminal(const Game& game,int terminal);

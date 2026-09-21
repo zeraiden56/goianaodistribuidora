@@ -1,134 +1,1472 @@
 #include "audio.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 namespace {
-constexpr double pi=3.141592653589793;
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+constexpr double PI = 3.14159265358979323846;
+
+constexpr int DEFAULT_SAMPLE_RATE = 48000;
+
+constexpr float CLIP_PEAK = 0.82f;
+constexpr float MIX_LIMIT = 0.95f;
+
+constexpr float STEP_DISTANCE = 0.85f;
+
+// =============================================================================
+// Lightweight random generator
+//
+// Avoids depending on random()/rand() for audio variation.
+// This is only used for harmless sound variation, not game logic.
+// =============================================================================
+
+std::uint32_t audioRng = 0x91e10da5u;
+
+std::uint32_t nextRandom()
+{
+    audioRng ^= audioRng << 13;
+    audioRng ^= audioRng >> 17;
+    audioRng ^= audioRng << 5;
+
+    return audioRng;
+}
+
+float random01()
+{
+    return static_cast<float>(
+        nextRandom() & 0xffffu
+    ) / 65535.0f;
+}
+
+float randomRange(float minValue, float maxValue)
+{
+    return minValue +
+        (maxValue - minValue) *
+        random01();
+}
+
+// =============================================================================
+// Soft limiter
+//
+// Normal levels pass unchanged.
+// Only peaks approaching clipping are compressed.
+// =============================================================================
+
+float softLimit(float value)
+{
+    const float absolute =
+        std::abs(value);
+
+    if (absolute <= 0.85f)
+        return value;
+
+    const float excess =
+        absolute - 0.85f;
+
+    const float compressed =
+        0.85f +
+        0.10f *
+        (
+            1.0f -
+            std::exp(
+                -excess / 0.10f
+            )
+        );
+
+    return std::copysign(
+        std::min(compressed, MIX_LIMIT),
+        value
+    );
+}
+
+// =============================================================================
+// Procedural synthesizer
+// =============================================================================
+
 struct Synth {
+
     std::vector<float> samples;
-    int rate;
-    std::uint32_t rng=0x53ac19;
-    Synth(float seconds,int sampleRate):samples(static_cast<std::size_t>(seconds*sampleRate)),rate(sampleRate){}
-    float noise(){rng^=rng<<13;rng^=rng>>17;rng^=rng<<5;return float(rng&0xffff)/32767.5f-1;}
-    void tone(float start,float duration,float hz,float gain,float endHz=0) {
-        for(int i=0;i<int(duration*rate);++i) {
-            auto index=static_cast<std::size_t>(start*rate)+i;if(index>=samples.size())break;
-            float t=float(i)/rate,u=t/duration;
-            float envelope=std::min(1.f,t/.005f)*std::min(1.f,(duration-t)/.012f)*std::exp(-2.f*u);
-            double phase=2*pi*(hz*t+(endHz>0?(endHz-hz)*t*t/(2*duration):0));
-            samples[index]+=gain*envelope*float(std::sin(phase));
+
+    int rate = DEFAULT_SAMPLE_RATE;
+
+    std::uint32_t rng = 0x53ac19u;
+
+    Synth(float seconds, int sampleRate)
+        : samples(
+            static_cast<std::size_t>(
+                std::max(
+                    0.0f,
+                    seconds
+                ) *
+                sampleRate
+            ),
+            0.0f
+        ),
+          rate(sampleRate)
+    {
+    }
+
+    // -------------------------------------------------------------------------
+    // Noise generator
+    // -------------------------------------------------------------------------
+
+    float noise()
+    {
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+
+        return
+            static_cast<float>(
+                rng & 0xffffu
+            ) /
+            32767.5f -
+            1.0f;
+    }
+
+    // -------------------------------------------------------------------------
+    // Sine tone with optional frequency sweep and second harmonic
+    // -------------------------------------------------------------------------
+
+    void tone(
+        float start,
+        float duration,
+        float hz,
+        float gain,
+        float endHz = 0.0f,
+        float harmonic = 0.0f)
+    {
+        if (
+            duration <= 0.0f ||
+            gain <= 0.0f ||
+            hz <= 0.0f ||
+            rate <= 0 ||
+            start < 0.0f
+        ) {
+            return;
+        }
+
+        const int total =
+            std::max(
+                1,
+                static_cast<int>(
+                    duration * rate
+                )
+            );
+
+        const std::size_t firstSample =
+            static_cast<std::size_t>(
+                start * rate
+            );
+
+        // Attack/release adapt to short sounds.
+        const float attack =
+            std::min(
+                0.005f,
+                duration * 0.20f
+            );
+
+        const float release =
+            std::min(
+                0.018f,
+                duration * 0.30f
+            );
+
+        harmonic =
+            std::clamp(
+                harmonic,
+                0.0f,
+                0.6f
+            );
+
+        for (int i = 0; i < total; ++i) {
+
+            const std::size_t index =
+                firstSample +
+                static_cast<std::size_t>(i);
+
+            if (index >= samples.size())
+                break;
+
+            const float t =
+                static_cast<float>(i) /
+                static_cast<float>(rate);
+
+            const float u =
+                std::clamp(
+                    t / duration,
+                    0.0f,
+                    1.0f
+                );
+
+            const float attackEnvelope =
+                attack > 0.0f
+                    ? std::min(
+                        1.0f,
+                        t / attack
+                    )
+                    : 1.0f;
+
+            const float releaseEnvelope =
+                release > 0.0f
+                    ? std::min(
+                        1.0f,
+                        (duration - t) /
+                        release
+                    )
+                    : 1.0f;
+
+            // Keeps the original character but prevents abrupt cut-off.
+            const float decay =
+                std::exp(
+                    -2.0f * u
+                );
+
+            const float envelope =
+                attackEnvelope *
+                releaseEnvelope *
+                decay;
+
+            // Linear chirp.
+            const double sweep =
+                endHz > 0.0f
+                    ? (
+                        static_cast<double>(
+                            endHz - hz
+                        ) *
+                        t *
+                        t /
+                        (
+                            2.0 *
+                            duration
+                        )
+                    )
+                    : 0.0;
+
+            const double phase =
+                2.0 *
+                PI *
+                (
+                    hz * t +
+                    sweep
+                );
+
+            float wave =
+                static_cast<float>(
+                    std::sin(phase)
+                );
+
+            // A little harmonic content stops effects sounding like
+            // perfectly clean test signals.
+            if (harmonic > 0.0f) {
+
+                const float second =
+                    static_cast<float>(
+                        std::sin(
+                            phase * 2.0
+                        )
+                    );
+
+                wave =
+                    (
+                        wave +
+                        second * harmonic
+                    ) /
+                    (
+                        1.0f +
+                        harmonic
+                    );
+            }
+
+            samples[index] +=
+                gain *
+                envelope *
+                wave;
         }
     }
-    void noiseBurst(float start,float duration,float gain,float smoothing) {
-        float filtered=0;
-        for(int i=0;i<int(duration*rate);++i) {
-            auto index=static_cast<std::size_t>(start*rate)+i;if(index>=samples.size())break;
-            float t=float(i)/rate,u=t/duration;
-            filtered+=smoothing*(noise()-filtered);
-            float envelope=std::min(1.f,t/.004f)*std::min(1.f,(duration-t)/.02f)*std::exp(-3*u);
-            samples[index]+=gain*filtered*envelope;
+
+    // -------------------------------------------------------------------------
+    // Filtered noise
+    //
+    // smoothing:
+    //   high value -> sharp / bright
+    //   low value  -> muffled / soft
+    // -------------------------------------------------------------------------
+
+    void noiseBurst(
+        float start,
+        float duration,
+        float gain,
+        float smoothing)
+    {
+        if (
+            duration <= 0.0f ||
+            gain <= 0.0f ||
+            rate <= 0 ||
+            start < 0.0f
+        ) {
+            return;
         }
+
+        smoothing =
+            std::clamp(
+                smoothing,
+                0.001f,
+                1.0f
+            );
+
+        const int total =
+            std::max(
+                1,
+                static_cast<int>(
+                    duration * rate
+                )
+            );
+
+        const std::size_t firstSample =
+            static_cast<std::size_t>(
+                start * rate
+            );
+
+        const float attack =
+            std::min(
+                0.004f,
+                duration * 0.15f
+            );
+
+        const float release =
+            std::min(
+                0.025f,
+                duration * 0.35f
+            );
+
+        float filtered = 0.0f;
+
+        for (int i = 0; i < total; ++i) {
+
+            const std::size_t index =
+                firstSample +
+                static_cast<std::size_t>(i);
+
+            if (index >= samples.size())
+                break;
+
+            const float t =
+                static_cast<float>(i) /
+                static_cast<float>(rate);
+
+            const float u =
+                std::clamp(
+                    t / duration,
+                    0.0f,
+                    1.0f
+                );
+
+            filtered +=
+                smoothing *
+                (
+                    noise() -
+                    filtered
+                );
+
+            const float attackEnvelope =
+                attack > 0.0f
+                    ? std::min(
+                        1.0f,
+                        t / attack
+                    )
+                    : 1.0f;
+
+            const float releaseEnvelope =
+                release > 0.0f
+                    ? std::min(
+                        1.0f,
+                        (duration - t) /
+                        release
+                    )
+                    : 1.0f;
+
+            const float decay =
+                std::exp(
+                    -3.0f * u
+                );
+
+            const float envelope =
+                attackEnvelope *
+                releaseEnvelope *
+                decay;
+
+            samples[index] +=
+                gain *
+                filtered *
+                envelope;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Short mechanical impact
+    // -------------------------------------------------------------------------
+
+    void click(
+        float start,
+        float gain = 0.2f)
+    {
+        noiseBurst(
+            start,
+            0.018f,
+            gain,
+            0.90f
+        );
+
+        tone(
+            start,
+            0.025f,
+            1850.0f,
+            gain * 0.35f,
+            900.0f,
+            0.20f
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Normalize + trim
+    //
+    // Scaling is preferable to simply clipping every sample at +/- 0.8.
+    // -------------------------------------------------------------------------
+
+    void finalize()
+    {
+        float peak = 0.0f;
+
+        for (float sample : samples) {
+            peak =
+                std::max(
+                    peak,
+                    std::abs(sample)
+                );
+        }
+
+        if (peak > CLIP_PEAK) {
+
+            const float scale =
+                CLIP_PEAK / peak;
+
+            for (float& sample : samples)
+                sample *= scale;
+        }
+
+        // Remove completely inactive tail.
+        while (
+            !samples.empty() &&
+            std::abs(samples.back()) <
+                0.00001f
+        ) {
+            samples.pop_back();
+        }
+
+        // Ensures interpolation always ends on zero.
+        if (!samples.empty())
+            samples.back() = 0.0f;
     }
 };
-}
-std::vector<float> synthesizeSound(Sound sound,int sampleRate) {
-    if(sampleRate<8000||sampleRate>192000||sound>=Sound::Count)return {};
-    Synth s(sound==Sound::Smoke?2.f:sound==Sound::Drink?1.9f:1.2f,sampleRate);
-    switch(sound) {
-    case Sound::Step:
-        s.tone(0,.15f,90,.2f,55);s.noiseBurst(0,.09f,.1f,.08f);
-        s.noiseBurst(.055f,.14f,.055f,.045f);break;
-    case Sound::Drink:
-        s.noiseBurst(0,.04f,.28f,.8f);s.tone(.01f,.06f,1600,.12f,700);
-        s.noiseBurst(.04f,.22f,.14f,.18f);
-        for(float at:{.28f,.65f,1.02f,1.39f}) {
-            s.tone(at,.17f,310,.22f,105);s.tone(at+.025f,.12f,540,.08f,180);
-            s.noiseBurst(at,.18f,.16f,.06f);
-        }
-        break;
-    case Sound::Smoke:
-        // Flint wheel, ignition click, brief flame, then inhale and exhale.
-        s.noiseBurst(0,.045f,.55f,.85f);s.tone(0,.035f,2200,.12f,900);
-        s.noiseBurst(.1f,.06f,.4f,.7f);s.noiseBurst(.16f,.32f,.19f,.26f);
-        s.noiseBurst(.5f,.55f,.24f,.035f);s.noiseBurst(1.2f,.75f,.32f,.055f);break;
-    case Sound::Cash:
-        s.noiseBurst(0,.1f,.28f,.22f);s.tone(.025f,.65f,1850,.3f);
-        s.tone(.025f,.52f,2731,.12f);s.noiseBurst(.18f,.28f,.18f,.13f);
-        for(float at:{.27f,.36f,.48f})s.tone(at,.09f,3200,.09f);
-        s.noiseBurst(.65f,.08f,.28f,.25f);break;
-    case Sound::Card:
-        s.noiseBurst(0,.13f,.12f,.18f);s.tone(.18f,.1f,1050,.21f);
-        s.tone(.48f,.13f,1450,.2f);s.tone(.65f,.24f,1900,.2f);break;
-    case Sound::Computer:
-        s.noiseBurst(0,.04f,.2f,.8f);s.noiseBurst(.04f,.7f,.1f,.025f);
-        s.tone(.12f,.16f,440,.17f);s.tone(.3f,.17f,660,.17f);s.tone(.5f,.35f,880,.18f);break;
-    case Sound::Pickup:
-        s.noiseBurst(0,.06f,.25f,.24f);s.tone(.015f,.13f,620,.1f,340);break;
-    case Sound::Delivery:
-        s.tone(0,.22f,660,.2f);s.tone(.24f,.3f,880,.2f);s.noiseBurst(.55f,.12f,.22f,.15f);break;
-    default:break;
+
+} // namespace
+
+// =============================================================================
+// SOUND SYNTHESIS
+// =============================================================================
+
+std::vector<float> synthesizeSound(
+    Sound sound,
+    int sampleRate)
+{
+    const int soundIndex =
+        static_cast<int>(sound);
+
+    if (
+        sampleRate < 8000 ||
+        sampleRate > 192000 ||
+        soundIndex < 0 ||
+        soundIndex >=
+            static_cast<int>(Sound::Count)
+    ) {
+        return {};
     }
-    for(auto& sample:s.samples)sample=std::clamp(sample,-.8f,.8f);
-    // Trim silence so inactive voices are promptly returned to the mixer.
-    while(!s.samples.empty()&&std::abs(s.samples.back())<.00001f)s.samples.pop_back();
-    if(!s.samples.empty())s.samples.back()=0;
-    return s.samples;
+
+    float length = 1.20f;
+
+    switch (sound) {
+
+        case Sound::Smoke:
+            length = 2.05f;
+            break;
+
+        case Sound::Drink:
+            length = 1.90f;
+            break;
+
+        default:
+            break;
+    }
+
+    Synth s(
+        length,
+        sampleRate
+    );
+
+    switch (sound) {
+
+        // =====================================================================
+        // FOOTSTEP
+        // =====================================================================
+
+        case Sound::Step:
+        {
+            // Low body impact.
+            s.tone(
+                0.000f,
+                0.145f,
+                96.0f,
+                0.20f,
+                52.0f,
+                0.12f
+            );
+
+            // Initial sole contact.
+            s.noiseBurst(
+                0.000f,
+                0.070f,
+                0.11f,
+                0.11f
+            );
+
+            // Slight secondary scrape.
+            s.noiseBurst(
+                0.052f,
+                0.125f,
+                0.055f,
+                0.040f
+            );
+
+            // Small sole click.
+            s.tone(
+                0.018f,
+                0.045f,
+                210.0f,
+                0.035f,
+                110.0f
+            );
+
+            break;
+        }
+
+        // =====================================================================
+        // DRINK
+        // =====================================================================
+
+        case Sound::Drink:
+        {
+            // Opening/contact sound.
+            s.click(
+                0.000f,
+                0.30f
+            );
+
+            s.tone(
+                0.010f,
+                0.070f,
+                1700.0f,
+                0.11f,
+                720.0f,
+                0.14f
+            );
+
+            // Initial fizz / liquid movement.
+            s.noiseBurst(
+                0.040f,
+                0.230f,
+                0.13f,
+                0.16f
+            );
+
+            constexpr float gulps[] = {
+                0.28f,
+                0.65f,
+                1.02f,
+                1.39f
+            };
+
+            for (float at : gulps) {
+
+                // Main low movement.
+                s.tone(
+                    at,
+                    0.17f,
+                    310.0f,
+                    0.20f,
+                    108.0f,
+                    0.05f
+                );
+
+                // Higher transient.
+                s.tone(
+                    at + 0.025f,
+                    0.12f,
+                    545.0f,
+                    0.075f,
+                    185.0f
+                );
+
+                // Liquid/noise texture.
+                s.noiseBurst(
+                    at,
+                    0.18f,
+                    0.145f,
+                    0.055f
+                );
+            }
+
+            break;
+        }
+
+        // =====================================================================
+        // SMOKE EFFECT
+        // =====================================================================
+
+        case Sound::Smoke:
+        {
+            // Existing stylized ignition / air noise sequence.
+            s.noiseBurst(
+                0.000f,
+                0.045f,
+                0.48f,
+                0.82f
+            );
+
+            s.tone(
+                0.000f,
+                0.038f,
+                2200.0f,
+                0.10f,
+                900.0f,
+                0.12f
+            );
+
+            s.noiseBurst(
+                0.100f,
+                0.060f,
+                0.34f,
+                0.66f
+            );
+
+            s.noiseBurst(
+                0.160f,
+                0.300f,
+                0.16f,
+                0.22f
+            );
+
+            s.noiseBurst(
+                0.500f,
+                0.52f,
+                0.20f,
+                0.030f
+            );
+
+            s.noiseBurst(
+                1.20f,
+                0.72f,
+                0.27f,
+                0.050f
+            );
+
+            break;
+        }
+
+        // =====================================================================
+        // CASH REGISTER
+        // =====================================================================
+
+        case Sound::Cash:
+        {
+            // Drawer/mechanical hit.
+            s.noiseBurst(
+                0.000f,
+                0.085f,
+                0.22f,
+                0.24f
+            );
+
+            s.click(
+                0.012f,
+                0.18f
+            );
+
+            // Register bell.
+            s.tone(
+                0.025f,
+                0.65f,
+                1850.0f,
+                0.27f,
+                0.0f,
+                0.18f
+            );
+
+            s.tone(
+                0.025f,
+                0.52f,
+                2731.0f,
+                0.105f,
+                0.0f,
+                0.22f
+            );
+
+            // Mechanical drawer movement.
+            s.noiseBurst(
+                0.18f,
+                0.28f,
+                0.14f,
+                0.12f
+            );
+
+            for (float at : {
+                0.27f,
+                0.36f,
+                0.48f
+            }) {
+                s.tone(
+                    at,
+                    0.08f,
+                    3200.0f,
+                    0.075f,
+                    0.0f,
+                    0.12f
+                );
+            }
+
+            // Drawer closing.
+            s.noiseBurst(
+                0.65f,
+                0.075f,
+                0.24f,
+                0.28f
+            );
+
+            s.click(
+                0.67f,
+                0.12f
+            );
+
+            break;
+        }
+
+        // =====================================================================
+        // CARD TERMINAL
+        // =====================================================================
+
+        case Sound::Card:
+        {
+            // Contact / button.
+            s.noiseBurst(
+                0.000f,
+                0.09f,
+                0.08f,
+                0.16f
+            );
+
+            s.click(
+                0.025f,
+                0.08f
+            );
+
+            // Confirmation sequence.
+            s.tone(
+                0.18f,
+                0.10f,
+                1050.0f,
+                0.18f,
+                0.0f,
+                0.08f
+            );
+
+            s.tone(
+                0.48f,
+                0.13f,
+                1450.0f,
+                0.18f,
+                0.0f,
+                0.08f
+            );
+
+            s.tone(
+                0.65f,
+                0.24f,
+                1900.0f,
+                0.18f,
+                0.0f,
+                0.06f
+            );
+
+            break;
+        }
+
+        // =====================================================================
+        // COMPUTER
+        // =====================================================================
+
+        case Sound::Computer:
+        {
+            // Key/button.
+            s.click(
+                0.000f,
+                0.18f
+            );
+
+            // Electronic background.
+            s.noiseBurst(
+                0.04f,
+                0.66f,
+                0.055f,
+                0.022f
+            );
+
+            // Ascending UI confirmation.
+            s.tone(
+                0.12f,
+                0.16f,
+                440.0f,
+                0.14f,
+                0.0f,
+                0.10f
+            );
+
+            s.tone(
+                0.30f,
+                0.17f,
+                660.0f,
+                0.14f,
+                0.0f,
+                0.08f
+            );
+
+            s.tone(
+                0.50f,
+                0.35f,
+                880.0f,
+                0.15f,
+                0.0f,
+                0.06f
+            );
+
+            break;
+        }
+
+        // =====================================================================
+        // PICKUP
+        // =====================================================================
+
+        case Sound::Pickup:
+        {
+            // Physical contact.
+            s.noiseBurst(
+                0.000f,
+                0.055f,
+                0.20f,
+                0.22f
+            );
+
+            // Quick descending thunk.
+            s.tone(
+                0.010f,
+                0.135f,
+                650.0f,
+                0.095f,
+                330.0f,
+                0.08f
+            );
+
+            s.click(
+                0.018f,
+                0.06f
+            );
+
+            break;
+        }
+
+        // =====================================================================
+        // DELIVERY
+        // =====================================================================
+
+        case Sound::Delivery:
+        {
+            // Positive two-note notification.
+            s.tone(
+                0.000f,
+                0.22f,
+                660.0f,
+                0.18f,
+                0.0f,
+                0.10f
+            );
+
+            s.tone(
+                0.24f,
+                0.30f,
+                880.0f,
+                0.18f,
+                0.0f,
+                0.08f
+            );
+
+            // Physical package arrival.
+            s.noiseBurst(
+                0.55f,
+                0.12f,
+                0.18f,
+                0.14f
+            );
+
+            s.tone(
+                0.56f,
+                0.10f,
+                125.0f,
+                0.12f,
+                70.0f
+            );
+
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    s.finalize();
+
+    return std::move(s.samples);
 }
-bool Audio::initialize() {
-    if(device)return true;
-    if(SDL_InitSubSystem(SDL_INIT_AUDIO)!=0)return false;
-    for(std::size_t i=0;i<clips.size();++i)clips[i]=synthesizeSound(static_cast<Sound>(i));
-    SDL_AudioSpec wanted{};wanted.freq=48000;wanted.format=AUDIO_F32SYS;wanted.channels=1;wanted.samples=512;
-    wanted.callback=&Audio::callback;wanted.userdata=this;
-    device=SDL_OpenAudioDevice(nullptr,0,&wanted,nullptr,0);
-    return device!=0;
+
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
+
+bool Audio::initialize()
+{
+    if (device)
+        return true;
+
+    if (
+        SDL_InitSubSystem(
+            SDL_INIT_AUDIO
+        ) != 0
+    ) {
+        return false;
+    }
+
+    SDL_AudioSpec wanted{};
+    SDL_AudioSpec obtained{};
+
+    wanted.freq =
+        DEFAULT_SAMPLE_RATE;
+
+    wanted.format =
+        AUDIO_F32SYS;
+
+    wanted.channels =
+        1;
+
+    wanted.samples =
+        512;
+
+    wanted.callback =
+        &Audio::callback;
+
+    wanted.userdata =
+        this;
+
+    // Keep float + mono fixed because callback depends on them.
+    // Frequency may change to something supported by the device.
+    device =
+        SDL_OpenAudioDevice(
+            nullptr,
+            0,
+            &wanted,
+            &obtained,
+            SDL_AUDIO_ALLOW_FREQUENCY_CHANGE
+        );
+
+    if (!device)
+        return false;
+
+    // Extra safety: callback assumes these exact properties.
+    if (
+        obtained.format != AUDIO_F32SYS ||
+        obtained.channels != 1 ||
+        obtained.freq < 8000
+    ) {
+        SDL_CloseAudioDevice(device);
+        device = 0;
+
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Generate clips using the REAL device sample rate.
+    // -------------------------------------------------------------------------
+
+    for (
+        std::size_t i = 0;
+        i < clips.size();
+        ++i
+    ) {
+        clips[i] =
+            synthesizeSound(
+                static_cast<Sound>(i),
+                obtained.freq
+            );
+    }
+
+    // Reset voices before starting callback.
+    for (auto& voice : voices)
+        voice = {};
+
+    stepDistance = 0.0f;
+    walking = false;
+
+    // SDL audio devices start paused.
+    SDL_PauseAudioDevice(
+        device,
+        0
+    );
+
+    return true;
 }
-void Audio::shutdown() {if(device){SDL_CloseAudioDevice(device);device=0;}}
-void Audio::callback(void* user,Uint8* stream,int bytes) {
-    auto& audio=*static_cast<Audio*>(user);
-    auto* out=reinterpret_cast<float*>(stream);int count=bytes/int(sizeof(float));
-    std::memset(stream,0,bytes);
-    for(auto& voice:audio.voices) {
-        if(!voice.clip)continue;
-        for(int i=0;i<count;++i) {
-            auto index=static_cast<std::size_t>(voice.cursor);
-            if(index>=voice.clip->size()){voice.clip=nullptr;break;}
-            auto next=std::min(index+1,voice.clip->size()-1);
-            float fraction=float(voice.cursor-index);
-            out[i]+=((*voice.clip)[index]*(1-fraction)+(*voice.clip)[next]*fraction)*voice.gain;
-            voice.cursor+=voice.rate;
+
+// =============================================================================
+// SHUTDOWN
+// =============================================================================
+
+void Audio::shutdown()
+{
+    if (!device)
+        return;
+
+    SDL_CloseAudioDevice(
+        device
+    );
+
+    device = 0;
+
+    // Callback no longer exists, so no lock is necessary.
+    for (auto& voice : voices)
+        voice = {};
+
+    stepDistance = 0.0f;
+    walking = false;
+}
+
+// =============================================================================
+// MIXER CALLBACK
+// =============================================================================
+
+void Audio::callback(
+    void* user,
+    Uint8* stream,
+    int bytes)
+{
+    if (
+        !user ||
+        !stream ||
+        bytes <= 0
+    ) {
+        return;
+    }
+
+    auto& audio =
+        *static_cast<Audio*>(user);
+
+    auto* out =
+        reinterpret_cast<float*>(
+            stream
+        );
+
+    const int count =
+        bytes /
+        static_cast<int>(
+            sizeof(float)
+        );
+
+    std::memset(
+        stream,
+        0,
+        static_cast<std::size_t>(
+            bytes
+        )
+    );
+
+    // -------------------------------------------------------------------------
+    // Mix active voices
+    // -------------------------------------------------------------------------
+
+    for (auto& voice : audio.voices) {
+
+        if (!voice.clip)
+            continue;
+
+        if (voice.clip->empty()) {
+            voice = {};
+            continue;
+        }
+
+        for (int i = 0; i < count; ++i) {
+
+            if (
+                !voice.clip ||
+                voice.cursor < 0.0f
+            ) {
+                voice = {};
+                break;
+            }
+
+            const std::size_t index =
+                static_cast<std::size_t>(
+                    voice.cursor
+                );
+
+            if (
+                index >=
+                voice.clip->size()
+            ) {
+                voice = {};
+                break;
+            }
+
+            const std::size_t next =
+                std::min(
+                    index + 1,
+                    voice.clip->size() - 1
+                );
+
+            const float fraction =
+                static_cast<float>(
+                    voice.cursor -
+                    static_cast<float>(
+                        index
+                    )
+                );
+
+            const float a =
+                (*voice.clip)[index];
+
+            const float b =
+                (*voice.clip)[next];
+
+            // Linear interpolation permits smooth playback-rate changes.
+            const float sample =
+                a +
+                (
+                    b - a
+                ) *
+                fraction;
+
+            out[i] +=
+                sample *
+                voice.gain;
+
+            voice.cursor +=
+                voice.rate;
         }
     }
-    for(int i=0;i<count;++i)out[i]=std::clamp(out[i]*audio.volume,-.95f,.95f);
+
+    // -------------------------------------------------------------------------
+    // Master volume + soft limiter
+    // -------------------------------------------------------------------------
+
+    for (int i = 0; i < count; ++i) {
+
+        const float mixed =
+            out[i] *
+            audio.volume;
+
+        out[i] =
+            softLimit(mixed);
+    }
 }
-void Audio::play(Sound sound,float gain,float rate) {
-    auto index=static_cast<std::size_t>(sound);
-    if(!device||index>=clips.size()||clips[index].empty())return;
-    SDL_LockAudioDevice(device);
-    auto voice=std::find_if(voices.begin(),voices.end(),[](const Voice& v){return !v.clip;});
-    if(voice!=voices.end())*voice={&clips[index],0,std::clamp(rate,.5f,2.f),std::clamp(gain,0.f,1.f)};
-    SDL_UnlockAudioDevice(device);
+
+// =============================================================================
+// PLAY SOUND
+// =============================================================================
+
+void Audio::play(
+    Sound sound,
+    float gain,
+    float rate)
+{
+    const int rawIndex =
+        static_cast<int>(sound);
+
+    if (
+        !device ||
+        rawIndex < 0 ||
+        rawIndex >=
+            static_cast<int>(
+                clips.size()
+            )
+    ) {
+        return;
+    }
+
+    const std::size_t index =
+        static_cast<std::size_t>(
+            rawIndex
+        );
+
+    if (clips[index].empty())
+        return;
+
+    gain =
+        std::clamp(
+            gain,
+            0.0f,
+            1.0f
+        );
+
+    rate =
+        std::clamp(
+            rate,
+            0.50f,
+            2.0f
+        );
+
+    if (gain <= 0.0f)
+        return;
+
+    SDL_LockAudioDevice(
+        device
+    );
+
+    // -------------------------------------------------------------------------
+    // Prefer an unused voice.
+    // -------------------------------------------------------------------------
+
+    auto voice =
+        std::find_if(
+            voices.begin(),
+            voices.end(),
+            [](const Voice& v)
+            {
+                return !v.clip;
+            }
+        );
+
+    // -------------------------------------------------------------------------
+    // Voice stealing.
+    //
+    // Previously a sound simply disappeared if all voices were occupied.
+    // Now the voice closest to completion is replaced.
+    // -------------------------------------------------------------------------
+
+    if (voice == voices.end()) {
+
+        voice =
+            std::max_element(
+                voices.begin(),
+                voices.end(),
+
+                [](const Voice& a,
+                   const Voice& b)
+                {
+                    auto progress =
+                        [](const Voice& v)
+                        {
+                            if (
+                                !v.clip ||
+                                v.clip->empty()
+                            ) {
+                                return 1.0f;
+                            }
+
+                            return
+                                static_cast<float>(
+                                    v.cursor
+                                ) /
+                                static_cast<float>(
+                                    v.clip->size()
+                                );
+                        };
+
+                    return
+                        progress(a) <
+                        progress(b);
+                }
+            );
+    }
+
+    if (voice != voices.end()) {
+
+        *voice = {
+            &clips[index],
+            0.0f,
+            rate,
+            gain
+        };
+    }
+
+    SDL_UnlockAudioDevice(
+        device
+    );
 }
-bool Audio::payment() {
-    bool card=(random()%2)==0;play(card?Sound::Card:Sound::Cash);return card;
+
+// =============================================================================
+// PAYMENT
+// =============================================================================
+
+bool Audio::payment()
+{
+    const bool card =
+        (nextRandom() & 1u) == 0u;
+
+    play(
+        card
+            ? Sound::Card
+            : Sound::Cash
+    );
+
+    return card;
 }
-void Audio::moved(float distance) {
-    if(distance<=.00001f){stepDistance=0;walking=false;return;}
-    if(!walking){play(Sound::Step,.4f,.92f+float(random()%17)/100);walking=true;}
-    stepDistance+=distance;
-    if(stepDistance>=.85f){stepDistance=std::fmod(stepDistance,.85f);play(Sound::Step,.4f,.92f+float(random()%17)/100);}
+
+// =============================================================================
+// PLAYER MOVEMENT / FOOTSTEPS
+// =============================================================================
+
+void Audio::moved(float distance)
+{
+    if (distance <= 0.00001f) {
+
+        stepDistance = 0.0f;
+        walking = false;
+
+        return;
+    }
+
+    // First step when movement starts.
+    if (!walking) {
+
+        play(
+            Sound::Step,
+            0.40f,
+            randomRange(
+                0.92f,
+                1.08f
+            )
+        );
+
+        walking = true;
+    }
+
+    // Prevent enormous movement/teleport values from creating
+    // a burst of many footsteps.
+    distance =
+        std::min(
+            distance,
+            STEP_DISTANCE * 3.0f
+        );
+
+    stepDistance += distance;
+
+    // Handles low-FPS frames better than a single "if".
+    int generatedSteps = 0;
+
+    while (
+        stepDistance >= STEP_DISTANCE &&
+        generatedSteps < 3
+    ) {
+        stepDistance -=
+            STEP_DISTANCE;
+
+        play(
+            Sound::Step,
+            0.40f,
+            randomRange(
+                0.92f,
+                1.08f
+            )
+        );
+
+        ++generatedSteps;
+    }
+
+    // Numerical safety.
+    stepDistance =
+        std::max(
+            0.0f,
+            stepDistance
+        );
 }
-void Audio::setVolume(int percent) {
-    if(device)SDL_LockAudioDevice(device);
-    volume=float(std::clamp(percent,0,100))/100;
-    if(device)SDL_UnlockAudioDevice(device);
+
+// =============================================================================
+// MASTER VOLUME
+// =============================================================================
+
+void Audio::setVolume(int percent)
+{
+    const float newVolume =
+        static_cast<float>(
+            std::clamp(
+                percent,
+                0,
+                100
+            )
+        ) /
+        100.0f;
+
+    if (device)
+        SDL_LockAudioDevice(device);
+
+    volume = newVolume;
+
+    if (device)
+        SDL_UnlockAudioDevice(device);
 }
-void Audio::pause(bool paused) {if(device)SDL_PauseAudioDevice(device,paused?1:0);}
-void Audio::clear() {
-    if(device)SDL_LockAudioDevice(device);
-    for(auto& voice:voices)voice={};
-    stepDistance=0;walking=false;
-    if(device)SDL_UnlockAudioDevice(device);
+
+// =============================================================================
+// PAUSE
+// =============================================================================
+
+void Audio::pause(bool paused)
+{
+    if (!device)
+        return;
+
+    SDL_PauseAudioDevice(
+        device,
+        paused ? 1 : 0
+    );
+}
+
+// =============================================================================
+// CLEAR ACTIVE SOUNDS
+// =============================================================================
+
+void Audio::clear()
+{
+    if (device)
+        SDL_LockAudioDevice(device);
+
+    for (auto& voice : voices)
+        voice = {};
+
+    stepDistance = 0.0f;
+    walking = false;
+
+    if (device)
+        SDL_UnlockAudioDevice(device);
 }

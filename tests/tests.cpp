@@ -12,17 +12,21 @@
 #include <sstream>
 #include <stdexcept>
 
+bool fillBag(Game& g,int product,bool packed=false) {
+    for(int i=0;i<g.bagCapacity;++i)if(!g.pickup(product,true,packed))return false;
+    return true;
+}
 void economyTests() {
     Game g;
     auto check=[](bool ok){if(!ok) {std::cerr<<"Economy test failed\n";std::exit(1);}};
     check(!g.sell()); check(g.order(0));check(g.cash==202);check(!g.order(1));g.tick(12);check(g.products[0].stock==30&&g.pending==-1);
-    g.customer=true;g.wanted=0;g.quantity=2;check(!g.sell());
-    check(g.pickup(1));check(!g.sell());check(!g.pickup(0));check(g.pickup(1));check(g.products[1].stock==10);
+    g.customer=true;g.mixedOrders[0]={};g.customerMotion[0]={};g.wanted=0;g.quantity=2;check(!g.sell());
+    check(g.pickup(1));check(!g.sell());check(!g.pickup(0));check(g.returnHeld());check(g.products[1].stock==10);
     check(g.pickup(0));check(g.sell());check(g.cash==202&&g.delivered==1&&g.customer);
     check(g.pickup(0));check(g.sell());check(g.cash==218&&g.products[0].stock==28&&g.sold==2&&g.held==-1);
-    g.customer=true;g.patience=65;check(g.pickup(0));check(g.sell());check(g.pickup(0));
+    g.customer=true;g.mixedOrders[0]={};g.customerMotion[0]={};g.patience=65;check(g.pickup(0));check(g.sell());check(g.pickup(0));
     g.tick(70);check(!g.customer&&g.reputation==92&&g.delivered==0&&g.products[0].stock==27&&g.held==0);
-    check(g.pickup(0));check(g.products[0].stock==28);
+    check(g.returnHeld());check(g.products[0].stock==28);
     g.products[0].stock=0;check(!g.pickup(0));check(!g.pickup(-1));
     g.cash=0;check(!g.order(3));check(!g.order(-1));
     check(interaction(-2.1f,-1.7f,0)==5);check(interaction(.65f,-1.6f,0)==1);
@@ -34,7 +38,7 @@ void economyTests() {
 void check(bool ok,const char* message) {if(!ok)throw std::runtime_error(message);}
 void persistenceTests(const std::filesystem::path& directory) {
     Game g;Player p;std::string error;
-    g.customer=true;g.wanted=0;g.quantity=3;g.pickup(0);g.sell();g.pickup(0);
+    g.customer=true;g.mixedOrders[0]={};g.customerMotion[0]={};g.wanted=0;g.quantity=3;g.pickup(0);g.sell();g.pickup(0);
     check(g.order(2),"order while holding");g.tick(3);g.cash=923;g.level=3;g.day=8;g.reinforced=true;
     p.x=-2.1f;p.z=-1.3f;p.yaw=.4f;p.pitch=-12;
     auto file=directory/"progress.save";
@@ -77,13 +81,13 @@ void capacityAndConsumptionTests() {
     check(!g.order(0),"full shelf rejects order");
     check(g.pickup(0)&&g.products[0].stock==47,"pickup from full shelf");
     check(!g.order(0),"held item reserves storage");
-    check(g.pickup(0)&&g.products[0].stock==48,"return to full shelf");
+    check(g.returnHeld()&&g.products[0].stock==48,"return to full shelf");
     g.products[0].stock=36;check(g.order(0),"exact capacity order");g.tick(12);check(g.products[0].stock==48,"exact capacity delivery");
-    g.products[0].stock=36;g.pickup(0);g.customer=true;g.wanted=0;g.quantity=2;g.sell();
+    g.products[0].stock=36;g.pickup(0);g.customer=true;g.mixedOrders[0]={};g.customerMotion[0]={};g.wanted=0;g.quantity=2;g.sell();
     check(g.order(0),"partial delivery reserves capacity");g.tick(70);
     check(g.products[0].stock==48,"expiry and inbound delivery preserve capacity");
     Game drinks;check(!drinks.consume(),"empty hands cannot consume");
-    drinks.pickup(3);check(!drinks.consume()&&drinks.held==3,"ice cannot be consumed");drinks.pickup(3);
+    drinks.pickup(3);check(!drinks.consume()&&drinks.held==3,"ice cannot be consumed");drinks.returnHeld();
     drinks.pickup(0);check(drinks.consume(),"drink beer");
     check(drinks.products[0].stock==17&&drinks.held==-1&&drinks.consumed==1&&drinks.intoxication==15,"consumption counted once");
     check(!drinks.consume()&&!drinks.pickup(2),"no duplicate consumption or pickup during animation");
@@ -111,7 +115,7 @@ void movementAndWorldTests() {
     }
     check(first[0].motorcycle!=first[1].motorcycle,"cars and motorcycles are present");
     for(auto vehicle:trafficAt(180000000.0))check(vehicle.x>=-27&&vehicle.x<=27,"traffic remains within loop");
-    check(securityCameras().size()==3,"interior and street cameras available");
+    check(securityCameras().size()==6,"interior and street cameras available");
     std::cout<<"Movement, vision and traffic tests passed\n";
 }
 void expansionAndHelperTests(const std::filesystem::path& directory) {
@@ -125,7 +129,7 @@ void expansionAndHelperTests(const std::filesystem::path& directory) {
     check(!walkable(2.7f,4.1f)&&walkable(2.7f,4.1f,true),"expansion opens doorway");
     check(!walkable(0,4,true)&&!walkable(3.8f,6.2f,true),"partition and sofa block walking");
     p.x=2.1f;p.z=2.3f;p.yaw=3.14159265f;
-    for(int i=0;i<26;++i)movePlayer(p,1,0,false,0,.05f,true);
+    for(int i=0;i<40;++i)movePlayer(p,1,0,false,0,.05f,true);
     check(p.z>5,"can walk from shop into back room");
     p.x=2.65f;p.z=6.2f;
     check(toggleSeat(p,true)&&p.seated&&movePlayer(p,1,0,true,0,.05f,true)==0,"sitting prevents walking");
@@ -136,13 +140,13 @@ void expansionAndHelperTests(const std::filesystem::path& directory) {
     check(toggleSeat(position,true)&&walkable(position.x,position.z,true),"stand in safe location");
     check(interaction(-3.6f,7.8f,3.14159265f,true)==8,"depot stock is interactable");
     for(int product=0;product<4;++product) {
-        Game worker;worker.cash=1000;worker.hire();worker.customer=true;worker.wanted=product;worker.quantity=3;
+        Game worker;worker.cash=1000;worker.hire();worker.customer=true;worker.mixedOrders[0]={};worker.customerMotion[0]={};worker.wanted=product;worker.quantity=3;
         int cash=worker.cash,stock=worker.products[product].stock;
         for(int frame=0;frame<1250&&worker.customer;++frame){worker.tick(.05f);check(walkable(worker.helper.x,worker.helper.z),"helper stays in walkable space");}
         check(worker.sold==3&&worker.cash==cash+3*worker.products[product].price,"helper fetches and sells full order");
         check(worker.products[product].stock==stock-3&&worker.helper.held==-1,"helper sales conserve stock");
     }
-    Game partial;partial.cash=1000;partial.hire();partial.customer=true;partial.wanted=0;partial.quantity=2;
+    Game partial;partial.cash=1000;partial.hire();partial.customer=true;partial.mixedOrders[0]={};partial.customerMotion[0]={};partial.wanted=0;partial.quantity=2;
     for(int i=0;i<500&&partial.helper.held<0;++i)partial.tick(.05f);
     check(partial.helper.held==0&&partial.occupied(0)==18,"helper-held stock remains reserved");
     check(saveGame(directory/"worker.save",partial,Player{},error),"save helper carrying stock");
@@ -152,7 +156,7 @@ void expansionAndHelperTests(const std::filesystem::path& directory) {
     partial.patience=.01f;partial.tick(.05f);partial.arrival=4;
     for(int i=0;i<500&&partial.helper.held>=0;++i){partial.arrival=4;partial.tick(.05f);}
     check(partial.helper.held==-1&&partial.products[0].stock==18&&partial.sold==0,"expired customer returns helper-held stock without payment");
-    Game race;race.cash=1000;race.hire();race.customer=true;race.wanted=1;race.quantity=1;
+    Game race;race.cash=1000;race.hire();race.customer=true;race.mixedOrders[0]={};race.customerMotion[0]={};race.wanted=1;race.quantity=1;
     for(int i=0;i<500&&race.helper.held<0;++i)race.tick(.05f);
     check(race.pickup(1)&&race.sell(),"player can finish while helper carries another unit");
     for(int i=0;i<500&&race.helper.held>=0;++i){race.arrival=4;race.tick(.05f);}
@@ -201,7 +205,7 @@ void progressionTests() {
     check(g.expand()&&g.upgradeCheckout()&&g.products[0].stock==stock,"grade unlocks second checkout without restocking");
     int cash=g.cash;check(!g.upgradeCheckout()&&g.cash==cash,"grade cannot charge twice");
     check(g.hire()&&g.hire()&&!g.hire(),"two attendants can be hired only once");
-    for(int i=2;i<=5;++i)check(g.upgradeBag()&&g.bagCapacity==i,"bag upgrades step by step");
+    for(int i=4;i<=5;++i)check(g.upgradeBag()&&g.bagCapacity==i,"bag upgrades step by step");
     check(!g.upgradeBag(),"bag capacity capped at five");
     check(g.cycleOrderSize()&&g.orderSize==24&&g.orderCost(0)==87,"24 pack discount rounded to whole reais");
     check(g.cycleOrderSize()&&g.orderSize==48&&g.orderCost(0)==154,"48 pack discount");
@@ -216,14 +220,14 @@ void progressionTests() {
     check(margin.marginBonus()==20&&margin.salePrice(2)>base,"days increase profit");
     int price=margin.salePrice(2);margin.level=5;
     check(margin.marginBonus()==40&&margin.salePrice(2)>price,"levels increase profit");
-    margin.customer=true;margin.wanted=2;margin.quantity=1;cash=margin.cash;
+    margin.customer=true;margin.mixedOrders[0]={};margin.customerMotion[0]={};margin.wanted=2;margin.quantity=1;cash=margin.cash;
     check(margin.pickup(2)&&margin.sell()&&margin.cash==cash+margin.salePrice(2),"sale pays progressive price");
     margin.day=1000000;check(margin.marginBonus()>100&&margin.salePrice(2)>price,"profit continues beyond one hundred percent");
     check(interaction(2.1f,-1.6f,0,true,true)==12&&interaction(2.1f,-1.6f,0,true,false)!=12,"second hatch has its own interaction");
     Game workers;workers.cash=10000;workers.expand();workers.upgradeCheckout();workers.hire();workers.hire();
     for(int i=0;i<4;++i)workers.upgradeBag();
-    workers.customer=true;workers.wanted=0;workers.quantity=5;
-    workers.second.customer=true;workers.second.wanted=1;workers.second.quantity=5;
+    workers.customer=true;workers.mixedOrders[0]={};workers.customerMotion[0]={};workers.wanted=0;workers.quantity=5;
+    workers.second.customer=true;workers.mixedOrders[1]={};workers.customerMotion[1]={};workers.second.wanted=1;workers.second.quantity=5;
     cash=workers.cash;bool firstBag=false,secondBag=false;
     for(int i=0;i<1500&&(workers.customer||workers.second.customer);++i) {
         if(!workers.customer)workers.arrival=4;
@@ -240,7 +244,7 @@ void progressionTests() {
     check(workers.products[0].stock==13&&workers.products[1].stock==5,"two-lane stock conserved");
     Game expired;expired.cash=5000;expired.expand();expired.upgradeCheckout();expired.hire();expired.hire();
     for(int i=0;i<4;++i)expired.upgradeBag();
-    expired.second.customer=true;expired.second.wanted=0;expired.second.quantity=5;
+    expired.second.customer=true;expired.mixedOrders[1]={};expired.customerMotion[1]={};expired.second.wanted=0;expired.second.quantity=5;
     for(int i=0;i<600&&expired.secondHelper.count==0;++i){expired.arrival=4;expired.tick(.05f);}
     check(expired.secondHelper.count==5,"second worker collects bag");
     expired.second.patience=.01f;expired.tick(.05f);
@@ -249,7 +253,7 @@ void progressionTests() {
     std::ostringstream current;encodeGame(current,Game{},Player{});std::istringstream records(current.str());
     std::string line;std::ostringstream v3;v3<<"DISTRIBUIDORA_SAVE 3\n";
     for(int i=0;i<11&&std::getline(records,line);++i)if(i>0)v3<<line<<'\n';
-    std::istringstream legacy(v3.str());check(decodeGame(legacy,loaded,p)&&!loaded.secondCheckout&&loaded.bagCapacity==1,"v3 saves migrate to default upgrades");
+    std::istringstream legacy(v3.str());check(decodeGame(legacy,loaded,p)&&!loaded.secondCheckout&&loaded.bagCapacity==3,"v3 saves migrate to default upgrades");
     Game invalid=workers;invalid.secondHelper.count=6;std::ostringstream corrupt;encodeGame(corrupt,invalid,p);
     std::istringstream bad(corrupt.str());check(!decodeGame(bad,loaded,p),"corrupt bag count rejected");
     std::cout<<"Bulk orders, progressive profit, two checkouts, bags and v4 saves passed\n";
@@ -257,17 +261,17 @@ void progressionTests() {
 void largerStoreTests() {
     Game g;g.cash=20000;
     check(!g.order(4)&&!g.pickup(5),"new drinks locked before expansion");
-    check(g.upgradeBag()&&g.bagCapacity==2&&!g.helper.hired,"player can upgrade bag before hiring");
-    for(int i=0;i<3;++i)check(g.upgradeBag(),"player bag upgrades to five");
-    check(g.pickup(0)&&g.heldCount==5&&g.products[0].stock==13&&g.occupied(0)==18,"player bag reserves all five units");
-    g.customer=true;g.wanted=0;g.quantity=2;int cash=g.cash;
+    check(g.upgradeBag()&&g.bagCapacity==4&&!g.helper.hired,"player can upgrade bag before hiring");
+    check(g.upgradeBag(),"player bag upgrades to five");
+    check(fillBag(g,0)&&g.heldCount==5&&g.products[0].stock==13&&g.occupied(0)==18,"player bag reserves all five units");
+    g.customer=true;g.mixedOrders[0]={};g.customerMotion[0]={};g.wanted=0;g.quantity=2;int cash=g.cash;
     check(g.sell()&&!g.customer&&g.heldCount==3&&g.sold==2&&g.cash==cash+16,"player delivers only needed quantity");
     check(g.consume()&&g.heldCount==2&&g.intoxication==15,"drinking consumes one bag item");
     check(validGame(g,Player{}),"consuming with remaining bag is saveable");
     std::ostringstream out;encodeGame(out,g,Player{});Game restored;Player p;std::istringstream in(out.str());
     check(decodeGame(in,restored,p)&&restored.heldCount==2&&restored.consumeTime>0,"bag and consumption survive load");
     check(!g.pickup(0)&&!g.deliverPlayer(),"cannot transfer during consumption");
-    g.tick(2);check(g.pickup(0)&&g.products[0].stock==15&&g.held==-1,"return remaining bag without duplicating consumed or sold units");
+    g.tick(2);check(g.returnHeld()&&g.products[0].stock==15&&g.held==-1,"return remaining bag without duplicating consumed or sold units");
     auto before=g.products;check(g.expand()&&g.expand()&&g.largeStore,"two physical expansions");
     for(int i=0;i<3;++i)check(g.upgradeStorage(),"storage capacity upgrade");
     check(!g.upgradeStorage()&&g.products[0].capacity==336,"storage cap combines with physical expansion");
@@ -279,8 +283,8 @@ void largerStoreTests() {
     if(g.pending>=0)g.tick(.1f);
     check(g.products[4].stock==24,"new drink arrives in correct quantity");
     g.products[5].stock=20;
-    check(g.pickup(5)&&g.heldCount==5&&g.consume()&&g.intoxication<15,"soda consumes one without increasing intoxication");
-    g.tick(2);g.pickup(5);
+    check(fillBag(g,5)&&g.heldCount==5&&g.consume()&&g.intoxication<15,"soda consumes one without increasing intoxication");
+    g.tick(2);g.returnHeld();
     check(interaction(8.f,2.1f,3.14159265f,true,true,true,true)==14,"new fridge interaction");
     check(interaction(0,-1.6f,0,true,true,true,true)==15,"third hatch interaction");
     check(interaction(3.8f,6.2f,-2.295f,true)==16,"computer reachable while seated");
@@ -291,9 +295,9 @@ void largerStoreTests() {
     Game workers;workers.cash=10000;workers.expand();workers.expand();workers.upgradeCheckout();workers.upgradeCheckout();
     workers.hire();workers.hire();workers.hire();for(int i=0;i<4;++i)workers.upgradeBag();
     workers.products[4].stock=20;workers.products[5].stock=20;
-    workers.customer=true;workers.wanted=4;workers.quantity=5;
-    workers.second.customer=true;workers.second.wanted=5;workers.second.quantity=5;
-    workers.third.customer=true;workers.third.wanted=4;workers.third.quantity=5;
+    workers.customer=true;workers.mixedOrders[0]={};workers.customerMotion[0]={};workers.wanted=4;workers.quantity=5;
+    workers.second.customer=true;workers.mixedOrders[1]={};workers.customerMotion[1]={};workers.second.wanted=5;workers.second.quantity=5;
+    workers.third.customer=true;workers.mixedOrders[2]={};workers.customerMotion[2]={};workers.third.wanted=4;workers.third.quantity=5;
     cash=workers.cash;bool thirdBag=false,annexRoute=false;
     for(int i=0;i<1300&&(workers.customer||workers.second.customer||workers.third.customer);++i) {
         if(!workers.customer)workers.arrival=4;
@@ -354,11 +358,11 @@ void wholesaleAndAnnexTests() {
     Game player;player.cash=10000;player.expand();player.expand();
     for(int i=0;i<4;++i)player.upgradeBag();
     player.products[0].stock=120;
-    check(player.pickup(0,true,true)&&player.heldPacked&&player.heldCount==60&&player.occupied(0)==120,"player picks five real crates from stock");
-    player.customer=true;player.wholesale=true;player.wanted=0;player.quantity=36;player.patience=180;cash=player.cash;
+    check(fillBag(player,0,true)&&player.heldPacked&&player.heldCount==60&&player.occupied(0)==120,"player picks five real crates from stock");
+    player.customer=true;player.mixedOrders[0]={};player.customerMotion[0]={};player.wholesale=true;player.wanted=0;player.quantity=36;player.patience=180;cash=player.cash;
     check(player.sell()&&player.cash==cash+36*player.salePrice(0)&&player.heldCount==24&&player.sold==36,"multi-crate order paid exactly once with leftovers");
     check(player.consume()&&player.heldCount==23,"one drink removed from a packed load");player.tick(2);
-    check(player.pickup(0)&&player.products[0].stock==83&&player.held==-1&&!player.heldPacked,"remaining crates and loose unit returned exactly");
+    check(player.returnHeld()&&player.products[0].stock==83&&player.held==-1&&!player.heldPacked,"remaining crates and loose unit returned exactly");
     player.products[0].stock=11;check(!player.pickup(0,true,true)&&player.products[0].stock==11,"cannot fabricate crate from fewer than twelve units");
     // Full bags sent to the two annex registers; expiration must refund all units.
     Game workers=g;workers.pending=-1;workers.pendingUnits=12;workers.delivery=0;workers.orderSize=12;
@@ -403,7 +407,7 @@ void wholesaleAndAnnexTests() {
     std::string line;std::ostringstream v5;v5<<"DISTRIBUIDORA_SAVE 5\n";
     for(int i=0;i<17&&std::getline(lines,line);++i)if(i>0)v5<<line<<'\n';
     std::istringstream old(v5.str());check(decodeGame(old,restored,p)&&restored.annexCheckouts==0&&!restored.heldPacked,"v5 saves migrate without new upgrades");
-    Game slow;slow.cash=10000;slow.hire();slow.customer=true;slow.wanted=0;slow.quantity=1;
+    Game slow;slow.cash=10000;slow.hire();slow.customer=true;slow.mixedOrders[0]={};slow.customerMotion[0]={};slow.wanted=0;slow.quantity=1;
     Game fast=slow;for(int i=0;i<3;++i)fast.upgradeStaffSpeed();
     int slowFrames=0,fastFrames=0;
     while(slow.customer&&slowFrames<1000){tickHelper(slow,.05f);++slowFrames;}

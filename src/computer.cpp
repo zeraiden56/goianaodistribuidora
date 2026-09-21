@@ -1,4 +1,7 @@
 #include "computer.hpp"
+#include "shop_layout.hpp"
+#include <algorithm>
+#include <cmath>
 const std::array<ComputerButton,20>& computerButtons() {
     static const std::array<ComputerButton,20> buttons{{
         {96,170,470,29,ComputerAction::Beer},{96,203,470,29,ComputerAction::Cigarettes},
@@ -69,4 +72,16 @@ std::string computerUnavailable(const Game& g,ComputerAction action) {
         if(g.cash<g.deliveryUpgradeCost())return "SALDO INSUFICIENTE PARA MELHORAR A ENTREGA.";
     }
     return {};
+}
+
+ComputerView computerView(const Player& p,int terminal,float focus,float fov,float aspect) {
+    const auto& screen=terminals[std::clamp(terminal,0,1)];
+    float t=std::clamp(focus,0.f,1.f);t=t*t*(3-2*t);
+    constexpr float zoomFov=42.f,pi=3.14159265f;
+    float halfHeight=.61875f*screen.scale/2,halfWidth=.55f*screen.scale;
+    float distance=std::max(halfHeight,halfWidth/std::max(.1f,aspect))/std::tan(zoomFov*pi/360);
+    float targetZ=screen.z-(distance+.042f*screen.scale)/shopScaleZ;
+    float eye=p.seated?1.12f:1.7f;
+    return {p.x+(screen.x-p.x)*t,eye+(screen.y-eye)*t,p.z+(targetZ-p.z)*t,
+        p.yaw+std::remainder(pi-p.yaw,2*pi)*t,p.pitch*(1-t),fov+(zoomFov-fov)*t};
 }

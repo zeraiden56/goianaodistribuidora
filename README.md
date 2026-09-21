@@ -1,10 +1,10 @@
 # Goianão Distribuidora
 
-Jogo em C++17, SDL2 e OpenGL: gerencie uma distribuidora brasileira em primeira pessoa, com cenário de poucos polígonos e visual inspirado na era PS2. Modelos e fonte são gerados pelo código, sem downloads de assets.
+Jogo em C++17, SDL2 e OpenGL: gerencie uma distribuidora brasileira em primeira pessoa, com cenário de poucos polígonos e visual inspirado na era PS2. Modelos, materiais de piso/parede/asfalto e fonte são gerados pelo código. A arte do menu vem de `src/images/logo-menu.png`, copiada para `images/` ao compilar.
 
 ## Compilar e executar no Linux
 
-Requer compilador com suporte a C++17, CMake 3.16 ou superior, pkg-config e bibliotecas de desenvolvimento SDL2 e OpenGL.
+Requer compilador com suporte a C++17, CMake 3.16 ou superior, pkg-config e bibliotecas de desenvolvimento SDL2, OpenGL e libpng.
 
 Para obter o código:
 
@@ -31,7 +31,7 @@ O teste do pacote verifica se o executável inicia sem depender do PATH do MSYS2
 
 ## Menus e opções
 
-O menu inicial permite **Continuar**, **Novo jogo**, **Opções** ou **Sair para o desktop**. Novo jogo pede confirmação antes de substituir um save existente. Use mouse e clique ou setas e Enter.
+O menu inicial permite **Continuar**, **Novo jogo**, **Opções** ou **Sair para o desktop**. Novo jogo permite escolher um dos três slots e dar um nome à distribuidora. Use mouse e clique ou setas e Enter. A logo aparece sobre um passeio de câmera pela fachada, interior e avenida; essa apresentação tem uma simulação separada e não avança sua partida.
 
 **Esc**, dentro do jogo, abre a pausa: retomar, salvar, opções, salvar e voltar ao menu ou salvar e sair. O tempo fica parado nos menus, inclusive nas opções. Perder o foco da janela também pausa o jogo.
 
@@ -48,15 +48,11 @@ Nas opções, clique/Enter alterna os valores; setas esquerda/direita ajustam a 
 
 ## Salvamento
 
-Há um slot, `progress.save`, e um arquivo separado de opções, `options.cfg`. Eles ficam na pasta de dados do usuário determinada por SDL. No Linux, normalmente:
-
-```text
-~/.local/share/DistribuidoraSimulator/DistribuidoraSimulator/
-```
+Há três slots independentes, `progress-1.save`, `progress-2.save` e `progress-3.save`, e um arquivo de opções `options.cfg`. Eles ficam na pasta de dados do usuário determinada por SDL; no Linux, normalmente `~/.local/share/DistribuidoraSimulator/DistribuidoraSimulator/`. O primeiro slot também reconhece o antigo `progress.save`.
 
 O jogo salva ao iniciar uma nova partida, a cada 30 segundos de jogo ativo, pelo menu de pausa, ao voltar ao menu principal e ao sair normalmente, inclusive pelo botão de fechar da janela. Se a gravação falhar, a saída é interrompida e o erro aparece no menu.
 
-São preservados caixa, estoque, melhorias, dia, reputação, pedido parcial, produto na mão, encomenda e seu tempo restante, posição e câmera, efeitos de consumo e sequência dos próximos clientes. Arquivos inválidos ou incompatíveis são recusados sem alterar a partida em memória. A gravação usa um arquivo temporário antes de substituir o save anterior. Não há múltiplos slots ou histórico de backups.
+São preservados caixa, estoque, melhorias, dia, reputação, pedido parcial, produto na mão, encomenda e seu tempo restante, posição e câmera, efeitos de consumo e sequência dos próximos clientes. Arquivos inválidos ou incompatíveis são recusados sem alterar a partida em memória. A gravação usa um arquivo temporário antes de substituir o save anterior. Os slots são escolhidos no menu; não há histórico automático de backups.
 
 Para usar outra pasta de dados:
 
@@ -67,16 +63,16 @@ Para usar outra pasta de dados:
 ## Jogar
 
 - **WASD** anda; segure **Shift** (esquerdo ou direito) para correr; **mouse** olha; **E** ou **clique esquerdo** interage com o objeto na mira; **R** consome; **Esc** abre a pausa; **F11** alterna tela cheia.
-- Leia o pedido no painel à direita. Cerveja e destilado ficam em **geladeiras com portas de vidro**, no fundo. **Cigarros ficam no nicho embaixo do balcão**, à direita da abertura de atendimento; gelo continua no **FREEZER**, à esquerda. Aproxime-se, olhe para o produto e pressione **E** ou clique esquerdo para pegar até a capacidade da sua sacola, limitada pelo estoque disponível. As portas das geladeiras abrem brevemente durante a retirada/devolução e fecham automaticamente.
-- As placas e o HUD mostram **quantidade no estoque/capacidade máxima**: cerveja 48, cigarro 36, destilado 24 e gelo 36.
-- A sacola do jogador carrega de uma a cinco unidades do mesmo produto por viagem. A retirada preenche a sacola até o limite ou até acabar o estoque. Para devolver todas as unidades restantes, olhe para o local de origem e pressione **E** ou clique novamente. Para trocar de produto, entregue ou devolva o conteúdo atual.
-- Leve a sacola à abertura do caixa escolhido e pressione **E** ou clique. Você entrega apenas a quantidade que falta no pedido; o excedente continua na sacola. O pagamento ocorre quando o pedido está completo.
+- Leia o pedido no balão sobre o cliente. Ele pode combinar até três produtos, como destilado e cigarro, com progresso separado para cada um. Cerveja e destilado ficam em **geladeiras com portas de vidro**, no fundo. **Cigarros ficam no nicho embaixo do balcão**, à direita da abertura de atendimento; gelo continua no **FREEZER**, à esquerda. Aproxime-se, olhe para o produto e pressione **E** ou clique esquerdo para pegar **uma unidade por interação**. Clique novamente para acrescentar outra unidade, até a capacidade da sacola. As portas das geladeiras abrem brevemente durante a retirada/devolução e fecham automaticamente.
+- As placas, a dica ao mirar o produto e o computador mostram **quantidade no estoque/capacidade máxima**: cerveja 48, cigarro 36, destilado 24 e gelo 36.
+- A sacola começa com **três unidades** do mesmo produto por viagem e pode chegar a cinco. Cada clique acrescenta uma unidade; clicar com a sacola cheia mantém os produtos na mão. Para devolver todas as unidades restantes, olhe para o local de origem e pressione **Q**. Para trocar de produto, entregue ou devolva o conteúdo atual.
+- Leve a sacola à abertura do caixa escolhido e pressione **E** ou clique. Você entrega apenas a quantidade que falta no pedido; o excedente continua na sacola. Entregue os tipos de produto na ordem que preferir. O pagamento ocorre somente quando todas as linhas do pedido estão completas.
 - Produtos errados são recusados. Se o cliente desistir, as unidades do balcão voltam ao estoque; o produto na sua mão continua com você.
 - No computador à direita, **E** abre/fecha o fornecedor. **1–6** encomendam o lote selecionado (inicialmente 12 unidades), pago na hora. A entrega começa em 12 segundos e pode ser melhorada até ficar instantânea. Há uma entrega por vez. Produtos na mão, no balcão e a caminho reservam espaço, para que devoluções não ultrapassem a capacidade.
 - No computador, **U** melhora o nível da loja, aumenta os pedidos até cinco unidades e melhora o lucro. Após ampliar a loja, o botão **Grade + Caixa 2** abre outra passagem de atendimento. A compra não altera o estoque.
 - O tempo continua no fornecedor. **Esc** fecha o fornecedor e abre a pausa.
 
-Você começa com R$ 250 e estoque inicial. Clientes de varejo esperam 65 segundos; clientes de engradados esperam 180 segundos. Vendas recuperam reputação e desistências a reduzem. Cada dia dura três minutos. A reputação é um indicador nesta versão. O espaço jogável é o interior da loja.
+Você começa com R$ 250, estoque inicial e sacola de três unidades. Clientes chegam caminhando pela calçada, viram para o balcão e vão embora após o atendimento ou desistência. A paciência começa ao alcançar o caixa. Clientes de varejo esperam 65 segundos; clientes de engradados esperam 180 segundos. Vendas recuperam reputação e desistências a reduzem. Cada ciclo de 24 horas dura três minutos, começando às 08:00, com transição entre dia e noite. A reputação é um indicador nesta versão. O espaço jogável é o interior da loja.
 
 ## Beber e fumar
 
@@ -86,6 +82,8 @@ Há uma animação simples de dois segundos. Nesse intervalo não é possível p
 
 ## Computador e interface
 
+Os dois terminais têm monitor com moldura, suporte, gabinete, teclado, mouse, cabos e LEDs. A tela fica voltada para a grade e mostra o desktop real da loja mesmo quando vista de fora, incluindo estoque, saldo e relógio. Ao acessar, a câmera aproxima e alinha a visão à tela em cerca de 0,7 segundo; ao fechar, retorna à posição original. O zoom não altera a posição salva nem faz o jogador levantar do sofá. **Esc** cancela a aproximação e pausa normalmente.
+
 O computador usa um desktop simplificado inspirado no Windows 98, com fundo verde-azulado, barra de título azul, botões em relevo e barra de tarefas. A tabela mostra seis produtos, o estoque, o preço de venda unitário e o preço total do lote selecionado: 12, 24, 48, 96, 192 ou 288 unidades. Cerveja em lata e refrigerante são liberados pela segunda ampliação.
 
 - **Mouse:** clique na linha do produto para encomendar, ou nos botões de câmeras e melhorias. **X** e **Fechar** encerram o computador.
@@ -93,7 +91,9 @@ O computador usa um desktop simplificado inspirado no Windows 98, com fundo verd
 - Ações indisponíveis ficam acinzentadas. Ao selecionar uma delas, a barra inferior explica se falta saldo, espaço ou se existe uma entrega em andamento. O clique não cobra nada nessas situações.
 - O saldo, o tempo de entrega, o bônus de lucro e a capacidade das sacolas ficam visíveis. O jogo segue rodando no computador; **Esc** abre a pausa.
 
-O HUD possui painéis compactos: estoque com indicadores de capacidade e estoque baixo; pedido com nome do cliente, unidades entregues e barra de paciência; situação do auxiliar; produto na mão e dica contextual da ação. O tempo do cliente fica destacado quando está acabando.
+O HUD mantém saldo e relógio no alto, sacola apenas quando há produtos e uma dica ao mirar algo interativo. Pedidos e paciência ficam sobre cada cliente; notificações desaparecem após alguns segundos. Estoque completo, equipe e melhorias ficam no computador. Segure **Tab** para consultar os controles.
+
+Clientes e atendentes usam modelos articulados com rosto, olhos, nariz, cabelo, acessórios e roupas diferentes. Os funcionários viram na direção do percurso e movem braços e pernas para buscar, carregar e entregar. Garrafas têm corpo e gargalo com faces arredondadas; latas têm tampa e lacre, maços têm embalagem própria e gelo tem um saco com cubos visíveis. Pisos, paredes, madeira e asfalto usam texturas procedurais. A planta tem 30% mais largura e 50% mais comprimento físico, mantendo compatibilidade das posições antigas.
 
 Há **oito aparências de clientes**, com nomes, roupas, alturas, cabelos, tons de pele e acessórios diferentes. A seleção varia a cada chegada, evitando repetir a mesma aparência consecutivamente. A aparência do cliente atual é salva; saves das versões anteriores continuam compatíveis.
 
@@ -118,13 +118,13 @@ No computador:
 - **B — Primeira ampliação: R$ 600.** Abre uma passagem ao lado das geladeiras, à direita, para um novo cômodo nos fundos. A expansão inclui depósito, sofá e TV. A capacidade total dobra para cerveja 96, cigarro 72, destilado 48 e gelo 72. A compra **não repõe mercadorias**.
 - **H — Contratar atendente: R$ 350 por funcionário.** O primeiro está disponível antes da expansão. O mesmo botão contrata os próximos funcionários, até cinco, após a abertura dos respectivos caixas. Cada um atende seu próprio caixa. Não há salário diário.
 
-O auxiliar anda até a geladeira, o nicho de cigarros ou o freezer, pega até a capacidade da sacola (e somente o que falta no pedido) e leva ao seu caixa. Ele completa pedidos e recebe o pagamento automaticamente. Se você terminar um pedido enquanto ele busca outra unidade, ou se o cliente desistir, ele devolve o produto. Sem estoque, ele espera reposição: você pode encomendar manualmente ou programar a reposição automática no computador. Seu estado aparece no HUD e ele é visível no cenário e nas câmeras. Ele não bloqueia a passagem do jogador.
+O auxiliar anda até a geladeira, o nicho de cigarros ou o freezer, pega até a capacidade da sacola (e somente o que falta no pedido) e leva ao seu caixa. Ele completa pedidos e recebe o pagamento automaticamente. Se você terminar um pedido enquanto ele busca outra unidade, ou se o cliente desistir, ele devolve o produto. Sem estoque, ele espera reposição: você pode encomendar manualmente ou programar a reposição automática no computador. Ele é visível no cenário e nas câmeras, com aparência própria em cada caixa. Em pedidos misturados, busca as linhas disponíveis e espera reposição das que faltam. Ele não bloqueia a passagem do jogador.
 
-As prateleiras do depósito são interativas: aproxime-se, olhe para o produto e pressione **E** para pegar ou devolver. O depósito e a área de vendas compartilham o mesmo inventário; as caixas nos fundos representam mercadorias existentes, sem criar estoque extra.
+As prateleiras do depósito são interativas: aproxime-se, olhe para o produto e pressione **E** para acrescentar uma unidade ou **Q** para devolver. O depósito e a área de vendas compartilham o mesmo inventário; as caixas nos fundos representam mercadorias existentes, sem criar estoque extra.
 
 Aproxime-se do sofá nos fundos e pressione **E** para sentar. Você pode olhar ao redor com o mouse; **E** levanta e **T** liga/desliga a TV. Sentado, **C** abre o computador. Também é possível olhar para a tela do terminal na mesa perto do sofá e clicar, ou pressionar **E**, para abri-lo. Fechar o computador mantém você sentado. Para levantar com **E**, olhe para fora do terminal. A televisão exibe uma animação original de futebol, sem áudio de programa. Também pode ser ligada/desligada com **E** ao se aproximar da tela. Enquanto você descansa, clientes, encomendas e auxiliar continuam ativos. **Esc** pausa tudo normalmente.
 
-As duas expansões, as melhorias de estoque, os cinco caixas e seus pedidos, os atendentes e o jogador com suas sacolas, os seis produtos, a encomenda com sua quantidade original, a TV e sua posição sentado entram no save versão 7, junto com as melhorias de entrega e a programação de reposição. Saves das versões 1 a 6 continuam carregando; o caminho de dados foi mantido para preservar partidas anteriores à mudança de nome.
+As duas expansões, as melhorias de estoque, os cinco caixas e seus pedidos, os atendentes e o jogador com suas sacolas, os seis produtos, a encomenda com sua quantidade original, a TV e sua posição sentado entram no save versão 9, junto com pedidos misturados, progresso de chegada/saída dos clientes, nome da loja e prestígio. Saves das versões 1 a 8 continuam carregando; sacolas antigas recebem capacidade mínima de três sem alterar seu conteúdo; o caminho de dados foi mantido para preservar partidas anteriores à mudança de nome.
 
 ## Atacado, lucro, capacidade e cinco caixas
 
@@ -139,28 +139,31 @@ Todas as compras são feitas no computador, por mouse ou setas/Tab e Enter:
 - **Corrida da equipe:** treinamentos de R$ 400, R$ 800 e R$ 1.200 aumentam a velocidade de 1,8 para 2,7, 3,6 e 4,5 unidades por segundo. Valem para todos os funcionários, inclusive futuras contratações.
 - **Estoque +:** três melhorias de R$ 250, R$ 500 e R$ 750. Cada uma acrescenta uma capacidade base de cada produto, sem criar mercadorias. Com as duas expansões e todas as melhorias, as capacidades são 336 cervejas, 252 cigarros, 168 destilados, 252 gelos, 336 cervejas em lata e 336 refrigerantes.
 - **Segundo atendente — R$ 350:** use novamente o botão de contratação depois de abrir o caixa 2.
-- **Sacolas:** disponíveis mesmo sem contratar funcionários. Cada compra acrescenta uma unidade à capacidade do jogador e de todos os atendentes: 2 por R$ 100, 3 por R$ 200, 4 por R$ 300 e 5 por R$ 400. A capacidade vale também para funcionários contratados depois.
+- **Sacolas:** disponíveis mesmo sem contratar funcionários. A capacidade inicial é três. Cada compra acrescenta uma unidade à capacidade do jogador e de todos os atendentes: 4 por R$ 300 e 5 por R$ 400. A capacidade vale também para funcionários contratados depois.
 
-**Vendas de engradados:** cada caixa/engradado contém 12 unidades do mesmo produto. Os caixas 4 e 5 recebem clientes de atacado. Nos caixas anteriores, pedidos em caixas começam a aparecer após a segunda ampliação e o nível 3. Inicialmente os pedidos podem ter até dois engradados; dias e níveis aumentam o limite até cinco (60 unidades). Cervejas, destilados e refrigerantes entram nesses pedidos. O painel mostra a quantidade de caixas, unidades entregues e tempo restante.
+**Vendas de engradados:** cada caixa/engradado contém 12 unidades do mesmo produto. Os caixas 4 e 5 recebem clientes de atacado. Nos caixas anteriores, pedidos em caixas começam a aparecer após a segunda ampliação e o nível 3. Inicialmente os pedidos podem ter até dois engradados; dias e níveis aumentam o limite até cinco (60 unidades). Cervejas, destilados e refrigerantes entram nesses pedidos. O balão do cliente mostra o total de unidades, o progresso e a barra de paciência.
 
-Olhe para o estoque e pressione **F** ou **botão direito** para retirar engradados completos. A capacidade da sacola permite levar de um a cinco engradados por viagem. **E/clique esquerdo** continua retirando unidades avulsas e entregando no caixa. O jogador entrega apenas o necessário e mantém a sobra; devolver na origem retorna toda a carga, inclusive uma caixa parcialmente usada. O pagamento soma o preço de venda atual de todas as unidades do pedido, sem multiplicar o estoque. Atendentes usam engradados automaticamente em pedidos de atacado; se o cliente desistir, devolvem tudo. Beber remove somente uma unidade, mesmo de uma carga em caixas.
+Olhe para o estoque e pressione **F** ou **botão direito** para acrescentar **um engradado completo por interação**. A capacidade da sacola permite levar de três a cinco engradados por viagem. **E/clique esquerdo** continua retirando unidades avulsas e entregando no caixa. O jogador entrega apenas o necessário e mantém a sobra; **Q** na origem retorna toda a carga, inclusive uma caixa parcialmente usada. O pagamento soma o preço de venda atual de todas as unidades do pedido, sem multiplicar o estoque. Atendentes usam engradados automaticamente em pedidos de atacado; se o cliente desistir, devolvem tudo. Beber remove somente uma unidade, mesmo de uma carga em caixas.
 
 O bônus sobre o lucro base aumenta **2 pontos percentuais por dia** e **5 por nível**, sem o antigo teto de 100%. O preço de venda é `preço base + arredondamento(lucro base × bônus / 100)`, com lucro base igual a preço base menos custo normal. Como os pagamentos usam reais inteiros, alguns aumentos aparecem no preço somente após acumular bônus suficiente. O desconto do atacado aumenta o lucro adicionalmente. O computador mostra os preços atuais; o pagamento usa o preço vigente ao concluir o pedido.
 
-## Rua noturna e câmeras
+## Dia, noite, vizinhança e câmeras
 
-A parte externa permanece à noite, com céu escuro, postes, janelas iluminadas, carros e motos passando em duas faixas. Faróis, lanternas e luzes no chão são efeitos estilizados, sem simulação física de iluminação. A loja permanece iluminada. O tráfego usa o relógio da partida, continua ao observar as câmeras e para quando o jogo é pausado.
+A avenida alterna céu de dia e noite, com sol, nuvens, estrelas, postes e janelas iluminadas. Há prédios de alturas diferentes, padaria, mercado, oficina, lanchonete e imóveis nos dois lados da distribuidora, além de árvores e veículos passando em duas faixas. O tráfego tem sedã, picape com caçamba e hatch, com vidros inclinados, retrovisores, maçanetas, placas, grades e rodas com aros girando. As motos têm chassi, suspensão, motor, escape, retrovisores e pilotos com braços/pernas dobrados e capacetes; uma variante leva baú de entregas. Postes nos dois lados da avenida acendem gradualmente ao anoitecer e apagam durante o dia, com luminárias, halos, fachos suaves e áreas de luz no asfalto e na calçada. Os faróis dos veículos acompanham esse ciclo. Faróis, lanternas e luzes no chão são efeitos estilizados, sem simulação física de iluminação. A loja permanece iluminada. O tráfego usa o relógio da partida, continua ao observar as câmeras e para quando o jogo é pausado.
 
 No computador, pressione **C** para acessar o sistema de vigilância:
 
-- **1**: interior da loja, visto do canto superior.
-- **2**: fachada e rua, vista da frente da loja.
-- **3**: rua e entrada, vista do outro lado da rua.
-- **Setas esquerda/direita**: alternar entre as câmeras.
+- **1**: interior da loja.
+- **2**: calçada, fachada e tráfego próximo.
+- **3**: entrada e caixas, vistos do outro lado da avenida.
+- **4**: depósito e descanso, liberada pela primeira ampliação.
+- **5**: ala de atacado, liberada pela segunda ampliação.
+- **6**: vista longa da avenida e do tráfego.
+- **Setas esquerda/direita**: alternam e pulam câmeras de áreas ainda fechadas. Também é possível clicar nos seis botões na parte inferior; os bloqueados indicam a ampliação necessária.
 - **C** ou **E**: voltar ao fornecedor. **E** novamente fecha o computador.
 - **Esc**: sair dos monitores e abrir o menu de pausa.
 
-As imagens são renderizadas ao vivo, mostrando estoque, cliente, gerente e veículos conforme o ponto de vista. Enquanto as câmeras estiverem abertas, você fica parado no computador, mas os clientes continuam esperando e as encomendas continuam chegando. As teclas **1–3**, nos monitores, só mudam a câmera; não compram mercadorias. Ao carregar uma partida, você volta à visão em primeira pessoa na posição salva.
+As imagens são renderizadas ao vivo, mostrando estoque, cliente, gerente e veículos conforme o ponto de vista. Enquanto as câmeras estiverem abertas, você fica parado no computador, mas os clientes continuam esperando e as encomendas continuam chegando. As teclas **1–6**, nos monitores, só mudam a câmera; não compram mercadorias. Ao carregar uma partida, você volta à visão em primeira pessoa na posição salva.
 
 ## Efeitos sonoros
 
@@ -185,7 +188,9 @@ Os sons podem tocar simultaneamente e pausam com o jogo. Voltar ao menu ou carre
 | `src/helper.cpp` / `.hpp` | Auxiliar, rotas, coleta e atendimento automático |
 | `src/interior.cpp` / `.hpp` | Depósito, sofá, TV animada e modelo do auxiliar |
 | `src/player.cpp` / `.hpp` | Posição, caminhada/corrida, colisão, visão e seleção de objetos |
-| `src/world.cpp` / `.hpp` | Rotas de tráfego e posições das câmeras |
+| `src/world.cpp` / `.hpp` | Rotas de tráfego, ciclo dos postes e navegação entre seis câmeras |
+| `src/traffic_render.cpp` | Carros, motos, pilotos, rodas e faróis |
+| `src/terminal_render.cpp` | Modelos dos computadores com desktop ao vivo na tela |
 | `src/world_render.cpp` / `.hpp` | Rua noturna, veículos e modelos de vigilância |
 | `src/postprocess.cpp` / `.hpp` | Desfoque progressivo e apresentação do modo retrô |
 | `src/render.cpp` / `.hpp` | Cenário, placas, fonte e composição de imagem |
@@ -208,6 +213,8 @@ ctest --test-dir build --output-on-failure
 ```
 
 Os testes de áudio verificam sinais não silenciosos, limites de amplitude, sons distintos, reprodução simultânea, pausa, volume e encerramento seguro usando um dispositivo simulado. Os demais testes cobrem vendas parciais, devoluções, falta de saldo/estoque, capacidade com reservas, consumo, expiração dos efeitos, salvamento e retomada, saves truncados/inválidos e falhas de gravação.
+
+O teste gráfico também verifica aproximação/retorno dos dois terminais, interrupção por pausa, posição preservada, seis câmeras por teclado e mouse e capturas da avenida de dia e à noite. Os testes de regras verificam câmeras bloqueadas/desbloqueadas, navegação circular, transição dos postes e enquadramento do monitor em diferentes proporções de janela.
 
 O teste gráfico percorre menus, novo jogo, consumo, salvar/continuar, cancelamento de novo jogo, opções, resolução, tela cheia, câmeras, compras de melhorias, depósito, sofá, TV, carregamento sentado e saída. Também verifica que o antigo comando de grade não altera saldo/estoque e que trocar câmeras não faz encomendas. Os testes também cobrem cinco caixas com dois na ala nova, viagens mais rápidas após treinamento, pedidos de vários engradados, lotes de 288 unidades, migração da versão 5, vendas dos novos produtos, sacola do jogador com sobra após vendas e consumo, interação por clique, computador no sofá, migração da versão 4 e lotes de 24/48 unidades, descontos, lucro por dia e nível, dois atendimentos simultâneos, sacolas, devolução de sacolas cheias e migração dos saves anteriores. Os testes de regras verificam corrida, colisão, progressão do desfoque, tráfego, expansão sem reposição gratuita, acesso aos fundos, sentar/levantar, atendimento automático dos quatro produtos, devoluções, cooperação com o jogador e salvamento/migração do auxiliar, melhorias e aparência do cliente. Também verifica pedidos por clique e Enter, ações bloqueadas, portas das geladeiras e as novas rotas do auxiliar. Renderiza os modos nativo e retrô, verifica erros OpenGL e grava capturas BMP das câmeras e da visão sóbria/embriagada na pasta temporária:
 

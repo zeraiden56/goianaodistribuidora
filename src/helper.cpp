@@ -46,10 +46,13 @@ bool travel(HelperState& helper,HelperPoint goal,float dt,bool large,float speed
     if(helper.route.empty())plan(helper,goal,large);
     float remaining=std::clamp(dt,0.f,.1f)*speed;
     while(remaining>0&&!helper.route.empty()) {
-        auto next=helper.route.front();float distance=std::hypot(next.x-helper.x,next.z-helper.z);
+        auto next=helper.route.front();float distance=std::hypot((next.x-helper.x)*shopScaleX,(next.z-helper.z)*shopScaleZ);
         if(distance<.002f){helper.route.erase(helper.route.begin());continue;}
         float step=std::min(remaining,distance),x=helper.x+(next.x-helper.x)*step/distance,z=helper.z+(next.z-helper.z)*step/distance;
         if(!walkable(x,z,large,large)){helper.route.clear();return false;}
+        float direction=std::atan2((x-helper.x)*shopScaleX,(z-helper.z)*shopScaleZ);
+        helper.yaw+=std::remainder(direction-helper.yaw,6.2831853f)*std::min(1.f,dt*12);
+        helper.walkCycle+=step*7;
         helper.x=x;helper.z=z;remaining-=step;
         if(step==distance)helper.route.erase(helper.route.begin());
     }
@@ -63,30 +66,33 @@ HelperPoint shelf(int product) {
 void tickHelper(Game& g,float dt,int lane) {
     auto& h=g.staff(lane);
     const auto& customer=lane>=2?g.extraCheckout(lane).customer:lane?g.second.customer:g.customer;
-    const auto& wanted=lane>=2?g.extraCheckout(lane).wanted:lane?g.second.wanted:g.wanted;
-    const auto& quantity=lane>=2?g.extraCheckout(lane).quantity:lane?g.second.quantity:g.quantity;
-    const auto& delivered=lane>=2?g.extraCheckout(lane).delivered:lane?g.second.delivered:g.delivered;if(!h.hired)return;
+    if(!h.hired)return;
+    int wanted=g.nextProduct(lane);
+    h.gesture=std::max(0.f,h.gesture-dt);
     h.wait=std::max(0.f,h.wait-dt);if(h.wait>0)return;
-    if(h.held>=0&&(!customer||wanted!=h.held)&&h.task!=HelperTask::Returning)task(h,HelperTask::Returning,h.held);
+    if(h.held>=0&&(!customer||g.remaining(lane,h.held)<=0)&&h.task!=HelperTask::Returning)task(h,HelperTask::Returning,h.held);
     if(h.task==HelperTask::Fetching&&(!customer||h.target!=wanted))task(h,HelperTask::Idle,-1);
     if(h.task==HelperTask::Idle) {
-        if(customer&&g.products[wanted].stock>0)task(h,HelperTask::Fetching,wanted);
+        if(customer&&wanted>=0)task(h,HelperTask::Fetching,wanted);
         else return;
     }
     if(h.task==HelperTask::Fetching) {
         if(!travel(h,shelf(h.target),dt,g.largeStore,g.staffSpeed()))return;
         if(g.products[h.target].stock>0) {
             h.packed=lane>=2?g.extraCheckout(lane).wholesale:lane?g.second.wholesale:g.wholesale;
-            h.count=std::min({g.bagCapacity*(h.packed?Game::crateUnits:1),quantity-delivered,g.products[h.target].stock});g.products[h.target].stock-=h.count;g.touchStorage(h.target);h.held=h.target;task(h,HelperTask::Delivering,h.target);h.wait=.35f;
+            h.count=std::min({g.bagCapacity*(h.packed?Game::crateUnits:1),g.remaining(lane,h.target),g.products[h.target].stock});g.products[h.target].stock-=h.count;g.touchStorage(h.target);h.held=h.target;task(h,HelperTask::Delivering,h.target);h.wait=.55f;h.gesture=.55f;
+            h.yaw=std::atan2((stockLocations[h.held].x-h.x)*shopScaleX,(stockLocations[h.held].z-h.z)*shopScaleZ);
         } else task(h,HelperTask::Idle,-1);
     } else if(h.task==HelperTask::Delivering) {
         if(!travel(h,{checkoutX(lane),-1.45f},dt,g.largeStore,g.staffSpeed()))return;
-        while(h.count>0&&customer&&wanted==h.held) {
+        h.yaw=3.14159265f;
+        if(g.customerMotion[lane].approach>0)return;
+        while(h.count>0&&customer&&g.remaining(lane,h.held)>0) {
             int unit=h.held;if(!g.deliver(unit,lane))break;--h.count;
         }
         if(h.count==0){h.held=-1;h.packed=false;task(h,HelperTask::Idle,-1);}
         else task(h,HelperTask::Returning,h.held);
-        h.wait=.4f;
+        h.wait=.55f;h.gesture=.55f;
     } else if(h.task==HelperTask::Returning) {
         if(!travel(h,shelf(h.held),dt,g.largeStore,g.staffSpeed()))return;
         g.products[h.held].stock+=h.count;h.count=0;g.touchStorage(h.held);h.held=-1;h.packed=false;task(h,HelperTask::Idle,-1);h.wait=.2f;
